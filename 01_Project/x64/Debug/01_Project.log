@@ -165,4 +165,3 @@ C:\Program Files (x86)\Windows Kits\10\Include\10.0.26100.0\um\urlmon.h(1806,6):
       C:\Program Files (x86)\Windows Kits\10\Include\10.0.26100.0\um\urlmon.h(1838,9):
       'BINDF2_RESERVED_1': この列挙子には型が必要です
   
-C:\Users\takes\Documents\Wish Engine\main.cpp(7,19): error C2065: 'WndProc': 定義されていない識別子です。
