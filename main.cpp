@@ -47,7 +47,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	MSG msg{};
 
 	while (msg.message != WM_QUIT) {
-		if (PeekMessage(&msg, nullptr, 0, 0, PM_REMOVE)) {
+		if (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE)) {
 			TranslateMessage(&msg);
 			DispatchMessage(&msg);
 		}
