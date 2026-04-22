@@ -13,6 +13,12 @@ void Log(const std::string& message) {
 	OutputDebugStringA(message.c_str());
 }
 
+void Log(std::ostream& os, const std::string& message) {
+	os << message << std::endl;
+	OutputDebugStringA(message.c_str());
+
+}
+
 int enemyHP = 100;
 std::string texturePath = "assets/texture.png";
 
@@ -25,6 +31,14 @@ std::chrono::time_point<std::chrono::system_clock, std::chrono::seconds>
 nowSeconds = std::chrono::time_point_cast<std::chrono::seconds>(now);
 
 std::chrono::zoned_time localTime{ std::chrono::current_zone(), nowSeconds };
+
+std::string dateString = std::format("{:%Y%m%d %H%M%S}", localTime);
+
+std::string logFilePath = std::string("logs/") + dateString + ".log";
+
+std::ofstream logStream(logFilePath);
+
+///// <chrono> end	/////
 
 ///// <ConvertString.cpp> start	/////
 
@@ -85,6 +99,8 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	std::string str1{ std::to_string(10) };
 
 	Log(std::format("enemyHP:{}, texturePath:{}\n", enemyHP, texturePath));
+
+	Log(std::format("now:{:%Y/%m/%d %H:%M:%S}\n", localTime));
 
 	std::filesystem::create_directory("logs");
 
