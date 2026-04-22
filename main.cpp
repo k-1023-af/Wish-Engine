@@ -2,9 +2,6 @@
 #include <cstdint>
 #include <string>
 #include <format>
-#include <filesystem>
-#include <fstream>
-#include <chrono>
 
 const int32_t kClientWidth = 1280;
 const int32_t kClientHeight = 720;
@@ -27,16 +24,6 @@ void Log(const std::wstring& message) {
 
 int enemyHP = 100;
 std::string texturePath = "assets/texture.png";
-
-/// <summary>
-/// /chrono system clock
-/// </summary>
-std::chrono::system_clock::time_point now = std::chrono::system_clock::now();
-
-std::chrono::time_point<std::chrono::system_clock, std::chrono::seconds>
-nowSeconds = std::chrono::time_point_cast<std::chrono::seconds>(now);
-
-std::chrono::zoned_time localTime{ std::chrono::current_zone(), nowSeconds };
 
 ///// <ConvertString.cpp> start	/////
 
@@ -94,7 +81,6 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 	Log(std::format("enemyHP:{}, texturePath:{}\n", enemyHP, texturePath));
 
-	std::filesystem::create_directory("logs");
 
 	RECT wrc = { 0,0,kClientWidth,kClientHeight };
 	AdjustWindowRect(&wrc, WS_OVERLAPPEDWINDOW, false);
