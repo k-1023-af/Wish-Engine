@@ -8,6 +8,10 @@
 #include <d3d12.h>
 #include <dxgi1_6.h>
 #include <cassert>
+#include <dbghelp.h>
+#include <strsafe.h>
+
+#pragma comment(lib, "Dbghelp.lib")
 
 #pragma comment(lib, "d3d12.lib")
 #pragma comment(lib, "dxgi.lib")
@@ -34,7 +38,6 @@ void Log(const std::wstring& message) {
 void Log(std::ostream& os, const std::string& message) {
 	os << message << std::endl;
 	OutputDebugStringA(message.c_str());
-
 }
 
 int enemyHP = 100;
@@ -91,6 +94,9 @@ std::string ConvertString(const std::wstring& str) {
 ///// <ConvertString.cpp> end	//////
 
 
+static LONG WINAPI ExportDump(EXCEPTION_POINTERS* exception) {
+	return EXCEPTION_EXECUTE_HANDLER;
+}
 
 
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
@@ -103,6 +109,9 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 }
 
 int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
+	SetUnhandledExceptionFilter(ExportDump);
+
+
 	WNDCLASS wc{};
 
 	wc.lpfnWndProc = WindowProc;
@@ -187,6 +196,28 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 	Log("Complete create D3D12Device!!!\n");
 
+	SYSTEMTIME time;
+	GetLocalTime(&time);
+	wchar_t filePath[MAX_PATH] = { 0 };
+	CreateDirectory(L"./Dumps", nullptr);
+	StringCchPrintfW(filePath, MAX_PATH, L"./Dumps/%04d-%02d%02d-%02d%02d.dmp", time.wYear, time.wMonth, time.wDay, time.wHour, time.wMinute);
+	HANDLE dumpFileHandle = CreateFile(filePath, GENERIC_READ | GENERIC_WRITE, FILE_SHARE_WRITE | FILE_SHARE_READ, 0, CREATE_ALWAYS, 0, 0);
+
+	DWORD processId = GetCurrentProcessId();
+	DWORD threadId = GetCurrentThreadId();
+
+	MINIDUMP_EXCEPTION_INFORMATION minidumpInformation{ 0 };
+	minidumpInformation.ThreadId = threadId;
+	minidumpInformation.ExceptionPointers = exception;
+	minidumpInformation.ClientPointers = TRUE;
+
+	MiniDumpWriteDump(GetCurrentProcess(), processId, dumpFileHandle, MiniDumpNormal, &minidumpInformation, nullptr, nullptr);
+
+	return EXCEPTION_EXECUTE_HANDLER;
+
+	uint32_t* p = nullptr;
+	*p = 100;
+
 	MSG msg{};
 
 	while (msg.message != WM_QUIT) {
@@ -201,3 +232,4 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 	return 0;
 }
+
