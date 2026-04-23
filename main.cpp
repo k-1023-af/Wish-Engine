@@ -2,9 +2,6 @@
 #include <cstdint>
 #include <string>
 #include <format>
-#include <filesystem>
-#include <fstream>
-#include <chrono>
 
 const int32_t kClientWidth = 1280;
 const int32_t kClientHeight = 720;
