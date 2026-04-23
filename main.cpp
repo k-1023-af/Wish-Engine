@@ -9,8 +9,20 @@
 const int32_t kClientWidth = 1280;
 const int32_t kClientHeight = 720;
 
+std::string str0{ "STRING!!!" };
+
+std::string str1{ std::to_string(10) };
+
+// Forward declarations to fix C3861: 'ConvertString' identifier not found
+std::wstring ConvertString(const std::string& str);
+std::string ConvertString(const std::wstring& str);
+
 void Log(const std::string& message) {
 	OutputDebugStringA(message.c_str());
+}
+
+void Log(const std::wstring& message) {
+	Log(ConvertString(message));
 }
 
 void Log(std::ostream& os, const std::string& message) {
@@ -93,10 +105,6 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	RegisterClass(&wc);
 
 	OutputDebugStringA("Hello,DirectX!\n");
-
-	std::string str0{ "STRING!!!" };
-
-	std::string str1{ std::to_string(10) };
 
 	Log(std::format("enemyHP:{}, texturePath:{}\n", enemyHP, texturePath));
 
