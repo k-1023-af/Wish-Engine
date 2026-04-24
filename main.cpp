@@ -122,8 +122,6 @@ static LONG WINAPI ExportDump(EXCEPTION_POINTERS* exception) {
 	MiniDumpWriteDump(GetCurrentProcess(), processId, dumpFileHandle, MiniDumpNormal, &minidumpInformation, nullptr, nullptr);
 
 	return EXCEPTION_EXECUTE_HANDLER;
-
-	return EXCEPTION_EXECUTE_HANDLER;
 }
 
 int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
