@@ -95,6 +95,10 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 }
 
 int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
+	std::filesystem::create_directory("logs");
+
+	Log(logStream, std::format("start time (local time): {:%Y/%m/%d %H:%M:%S}", localTime));
+
 	WNDCLASS wc{};
 
 	wc.lpfnWndProc = WindowProc;
@@ -109,8 +113,6 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	Log(std::format("enemyHP:{}, texturePath:{}\n", enemyHP, texturePath));
 
 	Log(std::format("now:{:%Y/%m/%d %H:%M:%S}\n", localTime));
-
-	std::filesystem::create_directory("logs");
 
 	RECT wrc = { 0,0,kClientWidth,kClientHeight };
 	AdjustWindowRect(&wrc, WS_OVERLAPPEDWINDOW, false);
