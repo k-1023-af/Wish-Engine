@@ -8,8 +8,8 @@
 #include <d3d12.h>
 #include <dxgi1_6.h>
 #include <cassert>
-#include <dbghelp.h>
 #include <strsafe.h>
+#include <dbghelp.h>
 
 #pragma comment(lib, "Dbghelp.lib")
 
@@ -94,11 +94,6 @@ std::string ConvertString(const std::wstring& str) {
 ///// <ConvertString.cpp> end	//////
 
 
-static LONG WINAPI ExportDump(EXCEPTION_POINTERS* exception) {
-	return EXCEPTION_EXECUTE_HANDLER;
-}
-
-
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 	switch (msg) {
 	case WM_DESTROY:
@@ -106,6 +101,29 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 		return 0;
 	}
 	return DefWindowProc(hwnd, msg, wparam, lparam);
+}
+
+static LONG WINAPI ExportDump(EXCEPTION_POINTERS* exception) {
+	SYSTEMTIME time;
+	GetLocalTime(&time);
+	wchar_t filePath[MAX_PATH] = { 0 };
+	CreateDirectory(L"./Dumps", nullptr);
+	StringCchPrintfW(filePath, MAX_PATH, L"./Dumps/%04d-%02d%02d-%02d%02d.dmp", time.wYear, time.wMonth, time.wDay, time.wHour, time.wMinute);
+	HANDLE dumpFileHandle = CreateFile(filePath, GENERIC_READ | GENERIC_WRITE, FILE_SHARE_WRITE | FILE_SHARE_READ, 0, CREATE_ALWAYS, 0, 0);
+
+	DWORD processId = GetCurrentProcessId();
+	DWORD threadId = GetCurrentThreadId();
+
+	MINIDUMP_EXCEPTION_INFORMATION minidumpInformation{ 0 };
+	minidumpInformation.ThreadId = threadId;
+	minidumpInformation.ExceptionPointers = exception;
+	minidumpInformation.ClientPointers = TRUE;
+
+	MiniDumpWriteDump(GetCurrentProcess(), processId, dumpFileHandle, MiniDumpNormal, &minidumpInformation, nullptr, nullptr);
+
+	return EXCEPTION_EXECUTE_HANDLER;
+
+	return EXCEPTION_EXECUTE_HANDLER;
 }
 
 int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
@@ -196,28 +214,6 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 	Log("Complete create D3D12Device!!!\n");
 
-	SYSTEMTIME time;
-	GetLocalTime(&time);
-	wchar_t filePath[MAX_PATH] = { 0 };
-	CreateDirectory(L"./Dumps", nullptr);
-	StringCchPrintfW(filePath, MAX_PATH, L"./Dumps/%04d-%02d%02d-%02d%02d.dmp", time.wYear, time.wMonth, time.wDay, time.wHour, time.wMinute);
-	HANDLE dumpFileHandle = CreateFile(filePath, GENERIC_READ | GENERIC_WRITE, FILE_SHARE_WRITE | FILE_SHARE_READ, 0, CREATE_ALWAYS, 0, 0);
-
-	DWORD processId = GetCurrentProcessId();
-	DWORD threadId = GetCurrentThreadId();
-
-	MINIDUMP_EXCEPTION_INFORMATION minidumpInformation{ 0 };
-	minidumpInformation.ThreadId = threadId;
-	minidumpInformation.ExceptionPointers = exception;
-	minidumpInformation.ClientPointers = TRUE;
-
-	MiniDumpWriteDump(GetCurrentProcess(), processId, dumpFileHandle, MiniDumpNormal, &minidumpInformation, nullptr, nullptr);
-
-	return EXCEPTION_EXECUTE_HANDLER;
-
-	uint32_t* p = nullptr;
-	*p = 100;
-
 	MSG msg{};
 
 	while (msg.message != WM_QUIT) {
@@ -229,6 +225,9 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			//ゲームの処理
 		}
 	}
+
+	uint32_t* p = nullptr;
+	*p = 100;
 
 	return 0;
 }
