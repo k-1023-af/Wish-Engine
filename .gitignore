@@ -366,3 +366,6 @@ git rm --cached <01_Project.vcxproj.user>
 #ignore version control
 *.log
 /logs
+
+*.dmp
+Dumps/
