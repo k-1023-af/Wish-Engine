@@ -19,9 +19,9 @@
 const int32_t kClientWidth = 1280;
 const int32_t kClientHeight = 720;
 
-std::string str0{ "STRING!!!" };
-
-std::string str1{ std::to_string(10) };
+//std::string str0{ "STRING!!!" };
+//
+//std::string str1{ std::to_string(10) };
 
 // Forward declarations to fix C3861: 'ConvertString' identifier not found
 std::wstring ConvertString(const std::string& str);
@@ -40,8 +40,8 @@ void Log(std::ostream& os, const std::string& message) {
 	OutputDebugStringA(message.c_str());
 }
 
-int enemyHP = 100;
-std::string texturePath = "assets/texture.png";
+//int enemyHP = 100;
+//std::string texturePath = "assets/texture.png";
 
 /// <summary>
 /// /chrono system clock
@@ -142,7 +142,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 	OutputDebugStringA("Hello,DirectX!\n");
 
-	Log(std::format("enemyHP:{}, texturePath:{}\n", enemyHP, texturePath));
+	//Log(std::format("enemyHP:{}, texturePath:{}\n", enemyHP, texturePath));
 
 	Log(std::format("now:{:%Y/%m/%d %H:%M:%S}\n", localTime));
 
@@ -286,6 +286,35 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	hr = commandAllocator->Reset();
 	assert(SUCCEEDED(hr));
 
+	//Debug Layer
+#ifdef _DEBUG
+	ID3D12Debug1* debugController = nullptr;
+	if (SUCCEEDED(D3D12GetDebugInterface(IID_PPV_ARGS(&debugController)))) {
+		debugController->EnableDebugLayer();
+		debugController->SetEnableGPUBasedValidation(TRUE);
+	}
+
+	ID3D12InfoQueue* infoQueue = nullptr;
+		if (SUCCEEDED(device->QueryInterface(IID_PPV_ARGS(&infoQueue)))){
+			infoQueue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_CORRUPTION, true);
+			infoQueue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_ERROR, true);
+			infoQueue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_WARNING, true);
+			D3D12_MESSAGE_ID denyIds[] = {
+				D3D12_MESSAGE_ID_RESOURCE_BARRIER_MISMATCHING_COMMAND_LIST_TYPE
+			};
+			D3D12_MESSAGE_SEVERITY severities[] = { D3D12_MESSAGE_SEVERITY_INFO };
+			D3D12_INFO_QUEUE_FILTER filter{};
+			filter.DenyList.NumIDs = _countof(denyIds);
+			filter.DenyList.pIDList = denyIds;
+			filter.DenyList.NumSeverities = _countof(severities);
+			filter.DenyList.pSeverityList = severities;
+
+			infoQueue->PushStorageFilter(&filter);
+			infoQueue->Release();
+	}
+
+#endif
+
 	Log("Complete create D3D12Device!!!\n");
 
 	MSG msg{};
@@ -300,8 +329,8 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		}
 	}
 
-	uint32_t* p = nullptr;
-	*p = 100;
+	/*uint32_t* p = nullptr;
+	*p = 100;*/
 
 	return 0;
 }
