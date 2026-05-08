@@ -211,23 +211,6 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 	assert(device != nullptr);
 
-	Log("Complete create D3D12Device!!!\n");
-
-	MSG msg{};
-
-	while (msg.message != WM_QUIT) {
-		if (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE)) {
-			TranslateMessage(&msg);
-			DispatchMessage(&msg);
-		}
-		else {
-			//ゲームの処理
-		}
-	}
-
-	uint32_t* p = nullptr;
-	*p = 100;
-
 	//Command queue
 	ID3D12CommandQueue* commandQueue = nullptr;
 	D3D12_COMMAND_QUEUE_DESC commandQueueDesc{};
@@ -302,6 +285,23 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	swapChain->Present(1, 0);
 	hr = commandAllocator->Reset();
 	assert(SUCCEEDED(hr));
+
+	Log("Complete create D3D12Device!!!\n");
+
+	MSG msg{};
+
+	while (msg.message != WM_QUIT) {
+		if (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE)) {
+			TranslateMessage(&msg);
+			DispatchMessage(&msg);
+		}
+		else {
+			//ゲームの処理
+		}
+	}
+
+	uint32_t* p = nullptr;
+	*p = 100;
 
 	return 0;
 }
