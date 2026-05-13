@@ -19,10 +19,6 @@
 const int32_t kClientWidth = 1280;
 const int32_t kClientHeight = 720;
 
-//std::string str0{ "STRING!!!" };
-//
-//std::string str1{ std::to_string(10) };
-
 // Forward declarations to fix C3861: 'ConvertString' identifier not found
 std::wstring ConvertString(const std::string& str);
 std::string ConvertString(const std::wstring& str);
@@ -138,8 +134,6 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	RegisterClass(&wc);
 
 	OutputDebugStringA("Hello,DirectX!\n");
-
-	//Log(std::format("enemyHP:{}, texturePath:{}\n", enemyHP, texturePath));
 
 	Log(std::format("now:{:%Y/%m/%d %H:%M:%S}\n", localTime));
 
@@ -346,9 +340,6 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			//ゲームの処理
 		}
 	}
-
-	/*uint32_t* p = nullptr;
-	*p = 100;*/
 
 	//Fence value for GPU
 	if (fence->GetCompletedValue() < fenceValue) {
