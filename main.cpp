@@ -122,7 +122,7 @@ static LONG WINAPI ExportDump(EXCEPTION_POINTERS* exception) {
 
 
 int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
-	SetUnhandledExceptionFilter(ExportDump);
+	std::filesystem::create_directory("logs");
 
 	WNDCLASS wc{};
 
@@ -136,8 +136,6 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	OutputDebugStringA("Hello,DirectX!\n");
 
 	Log(std::format("now:{:%Y/%m/%d %H:%M:%S}\n", localTime));
-
-	std::filesystem::create_directory("logs");
 
 	RECT wrc = { 0,0,kClientWidth,kClientHeight };
 	AdjustWindowRect(&wrc, WS_OVERLAPPEDWINDOW, false);
