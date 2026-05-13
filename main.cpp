@@ -270,15 +270,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	commandList->OMSetRenderTargets(1, &rtvHandles[backBufferIndex], false, nullptr);
 	float clearColor[] = { 0.1f, 0.25f, 0.5f, 1.0f };
 	commandList->ClearRenderTargetView(rtvHandles[backBufferIndex], clearColor, 0, nullptr);
-	hr = commandList->Close();
-	assert(SUCCEEDED(hr));
-	//GPU
-	ID3D12CommandList* commandLists[] = { commandList };
-	commandQueue->ExecuteCommandLists(1, commandLists);
-	swapChain->Present(1, 0);
-	hr = commandAllocator->Reset();
-	assert(SUCCEEDED(hr));
-
+	
 	//Transition Barrier
 	D3D12_RESOURCE_BARRIER barrier{};
 	barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
@@ -297,6 +289,15 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	//Fence signal
 	HANDLE fenceEvent = CreateEvent(NULL, FALSE, FALSE, NULL);
 	assert(fenceEvent != nullptr);
+	hr = commandList->Close();
+	assert(SUCCEEDED(hr));
+
+	//GPU
+	ID3D12CommandList* commandLists[] = { commandList };
+	commandQueue->ExecuteCommandLists(1, commandLists);
+	swapChain->Present(1, 0);
+	hr = commandAllocator->Reset();
+	assert(SUCCEEDED(hr));
 
 	//Debug Layer
 #ifdef _DEBUG
