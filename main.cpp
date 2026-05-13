@@ -36,9 +36,6 @@ void Log(std::ostream& os, const std::string& message) {
 	OutputDebugStringA(message.c_str());
 }
 
-//int enemyHP = 100;
-//std::string texturePath = "assets/texture.png";
-
 /// <summary>
 /// /chrono system clock
 /// </summary>
@@ -289,6 +286,10 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	//Fence signal
 	HANDLE fenceEvent = CreateEvent(NULL, FALSE, FALSE, NULL);
 	assert(fenceEvent != nullptr);
+
+	barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_RENDER_TARGET;
+	barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_PRESENT;
+	commandList->ResourceBarrier(1, &barrier);
 	hr = commandList->Close();
 	assert(SUCCEEDED(hr));
 
@@ -339,19 +340,19 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		}
 		else {
 			//ゲームの処理
+
+			//Fence value for GPU
+			if (fence->GetCompletedValue() < fenceValue) {
+				fence->SetEventOnCompletion(fenceValue, fenceEvent);
+
+				WaitForSingleObject(fenceEvent, INFINITE);
+			}
+
+			fenceValue++;
+
+			commandQueue->Signal(fence, fenceValue);
 		}
 	}
-
-	//Fence value for GPU
-	if (fence->GetCompletedValue() < fenceValue) {
-		fence->SetEventOnCompletion(fenceValue, fenceEvent);
-
-		WaitForSingleObject(fenceEvent, INFINITE);
-	}
-
-	fenceValue++;
-
-	commandQueue->Signal(fence, fenceValue);
 
 	return 0;
 }
