@@ -297,6 +297,11 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	ID3D12CommandList* commandLists[] = { commandList };
 	commandQueue->ExecuteCommandLists(1, commandLists);
 	swapChain->Present(1, 0);
+
+	fenceValue++;
+
+	commandQueue->Signal(fence, fenceValue);
+
 	hr = commandAllocator->Reset();
 	assert(SUCCEEDED(hr));
 
@@ -347,10 +352,6 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 				WaitForSingleObject(fenceEvent, INFINITE);
 			}
-
-			fenceValue++;
-
-			commandQueue->Signal(fence, fenceValue);
 		}
 	}
 
