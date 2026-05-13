@@ -38,9 +38,6 @@ void Log(std::ostream& os, const std::string& message) {
 	OutputDebugStringA(message.c_str());
 }
 
-//int enemyHP = 100;
-//std::string texturePath = "assets/texture.png";
-
 /// <summary>
 /// /chrono system clock
 /// </summary>
