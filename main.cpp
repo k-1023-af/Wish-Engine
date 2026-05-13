@@ -342,28 +342,48 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		}
 		else {
 			//ゲームの処理
+
+			//Close Handle / Close Window
+			CloseHandle(fenceEvent);
+			fence->Release();
+			rtvDescriptorHeap->Release();
+			swapChainResources[0]->Release();
+			swapChainResources[1]->Release();
+			swapChain->Release();
+			commandList->Release();
+			commandAllocator->Release();
+			commandQueue->Release();
+			device->Release();
+			useAdapter->Release();
+			dxgiFactory->Release();
+		#ifdef _DEBUG
+			debugController->Release();
+		#endif
+		CloseWindow(hwnd);
+
+			//Fence value for GPU
+			if (fence->GetCompletedValue() < fenceValue) {
+				fence->SetEventOnCompletion(fenceValue, fenceEvent);
+
+				WaitForSingleObject(fenceEvent, INFINITE);
+			}
+
+			fenceValue++;
+
+			commandQueue->Signal(fence, fenceValue);
+
+			IDXGIDebug1* debug;
+			if (SUCCEEDED(DXGIGetDebugInterface1(0, IID_PPV_ARGS(&debug)))) {
+				debug->ReportLiveObjects(DXGI_DEBUG_ALL, DXGI_DEBUG_RLO_ALL);
+				debug->ReportLiveObjects(DXGI_DEBUG_APP, DXGI_DEBUG_RLO_ALL);
+				debug->ReportLiveObjects(DXGI_DEBUG_D3D12, DXGI_DEBUG_RLO_ALL);
+				debug->Release();
+			}
+
 		}
 	}
 
-	//Fence value for GPU
-	if (fence->GetCompletedValue() < fenceValue) {
-		fence->SetEventOnCompletion(fenceValue, fenceEvent);
-
-		WaitForSingleObject(fenceEvent, INFINITE);
-	}
-
-	fenceValue++;
-
-	commandQueue->Signal(fence, fenceValue);
-
-	IDXGIDebug1* debug;
-	if (SUCCEEDED(DXGIGetDebugInterface1(0, IID_PPV_ARGS(&debug)))) {
-		debug->ReportLiveObjects(DXGI_DEBUG_ALL, DXGI_DEBUG_RLO_ALL);
-		debug->ReportLiveObjects(DXGI_DEBUG_APP, DXGI_DEBUG_RLO_ALL);
-		debug->ReportLiveObjects(DXGI_DEBUG_D3D12, DXGI_DEBUG_RLO_ALL);
-		debug->Release();
-	}
-
+	
 	return 0;
 }
 
