@@ -38,7 +38,6 @@ void Log(std::ostream& os, const std::string& message) {
 	OutputDebugStringA(message.c_str());
 }
 
-//int enemyHP = 100;
 //std::string texturePath = "assets/texture.png";
 
 /// <summary>
@@ -361,11 +360,8 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		else {
 			//ゲームの処理
 
-			
-
 		}
 	}
-
 	
 	//Close Handle / Close Window
 	CloseHandle(fenceEvent);
