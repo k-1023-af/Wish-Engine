@@ -191,8 +191,57 @@ return shaderBlob;
 } ////-----------CompileShader function end-----------/////
 
 
+// Helper function to create an Upload Heap Buffer
+ID3D12Resource* CreateBufferResource(ID3D12Device* device, size_t sizeInBytes)
+{
+	// Heap properties for Upload heap (CPU writable)
+	D3D12_HEAP_PROPERTIES uploadHeapProperties{};
+	uploadHeapProperties.Type = D3D12_HEAP_TYPE_UPLOAD;
+	uploadHeapProperties.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN;
+	uploadHeapProperties.MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN;
+
+	// Resource description for buffer
+	D3D12_RESOURCE_DESC resourceDesc{};
+	resourceDesc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
+	resourceDesc.Width = sizeInBytes;                    // Size in bytes
+	resourceDesc.Height = 1;
+	resourceDesc.DepthOrArraySize = 1;
+	resourceDesc.MipLevels = 1;
+	resourceDesc.SampleDesc.Count = 1;
+	resourceDesc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+
+	ID3D12Resource* resource = nullptr;
+
+	HRESULT hr = device->CreateCommittedResource(
+		&uploadHeapProperties,                  // Heap properties
+		D3D12_HEAP_FLAG_NONE,                   // Heap flags
+		&resourceDesc,                          // Resource description
+		D3D12_RESOURCE_STATE_GENERIC_READ,      // Initial state
+		nullptr,                                // Clear value (not needed for buffers)
+		IID_PPV_ARGS(&resource)                 // Output resource
+	);
+
+	assert(SUCCEEDED(hr));
+	if (FAILED(hr)) {
+		Log("Failed to create buffer resource!\n");
+		return nullptr;
+	}
+
+	return resource;
+}
+
+
 int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	SetUnhandledExceptionFilter(ExportDump);
+
+	//Debug Layer
+#ifdef _DEBUG
+	ID3D12Debug1* debugController = nullptr;
+	if (SUCCEEDED(D3D12GetDebugInterface(IID_PPV_ARGS(&debugController)))) {
+		debugController->EnableDebugLayer();
+		debugController->SetEnableGPUBasedValidation(TRUE);
+	}
+#endif
 
 	WNDCLASS wc{};
 
@@ -233,15 +282,6 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	IDXGIFactory7* dxgiFactory = nullptr;
 	//HRESULTはWindows系のエラーコードであり、
 	//関数が成功したかどうかをSUCCEEDEDマクロで判定できる
-
-		//Debug Layer
-#ifdef _DEBUG
-	ID3D12Debug1* debugController = nullptr;
-	if (SUCCEEDED(D3D12GetDebugInterface(IID_PPV_ARGS(&debugController)))) {
-		debugController->EnableDebugLayer();
-		debugController->SetEnableGPUBasedValidation(TRUE);
-	}
-#endif
 
 	HRESULT hr = CreateDXGIFactory(IID_PPV_ARGS(&dxgiFactory));
 
@@ -334,7 +374,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	descriptionRootSignature.NumParameters = _countof(rootParameters);
 	
 	//Material Resource (For simplicity, using a single color as material data. In a real application, this would likely be more complex and involve textures, multiple parameters, etc.)
-	ID3D12Resource* CreateBufferResource(ID3D12Device * device, size_t sizeInBytes);
+	//ID3D12Resource* CreateBufferResource(ID3D12Device * device, size_t sizeInBytes);
 	//ID3D12Resource* vertexResource = CreateBufferResource(device, sizeof(Vector4) * 3);
 	ID3D12Resource* materialResource = CreateBufferResource(device, sizeof(Vector4));
 	Vector4* materialData = nullptr;
