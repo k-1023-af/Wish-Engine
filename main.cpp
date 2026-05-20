@@ -48,9 +48,9 @@ void Log(std::ostream& os, const std::string& message) {
 
 //std::string texturePath = "assets/texture.png";
 
-/// <summary>
+
 /// /chrono system clock
-/// </summary>
+
 std::chrono::system_clock::time_point now = std::chrono::system_clock::now();
 
 std::chrono::time_point<std::chrono::system_clock, std::chrono::seconds>
