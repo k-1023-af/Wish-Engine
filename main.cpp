@@ -129,6 +129,68 @@ static LONG WINAPI ExportDump(EXCEPTION_POINTERS* exception) {
 	return EXCEPTION_EXECUTE_HANDLER;
 }
 
+//Shader compilation example (Before main loop)
+IDxcBlob* CompileShader(
+	const std::wstring& filePath,
+	const wchar_t* profile,
+
+	IDxcUtils* dxcUtils,
+	IDxcCompiler3* dxcCompiler,
+	IDxcIncludeHandler* includeHandler)
+
+	{ ////-----------CompileShader function start-----------/////
+		//1. hlsl file read
+
+	Log(ConvertString(std::format(L"Begin CompileShader, path:{}, profile:{}\n", filePath, profile)));
+
+IDxcBlobEncoding* shaderSource = nullptr;
+HRESULT hr = dxcUtils->LoadFile(filePath.c_str(), nullptr, &shaderSource);
+assert(SUCCEEDED(hr));
+
+DxcBuffer shaderSourceBuffer;
+shaderSourceBuffer.Ptr = shaderSource->GetBufferPointer();
+shaderSourceBuffer.Size = shaderSource->GetBufferSize();
+shaderSourceBuffer.Encoding = DXC_CP_UTF8;
+//2. compile
+LPCWSTR arguments[] = {
+	filePath.c_str(),//entry point (hlsl file name)
+	L"-E", L"main",//entry point path. Fundamentally does not go outside main
+	L"-T", profile,//Shader profile settings
+	L"-Zi", L"-Qembed_debug",//debug information is buried
+	L"-Od",		//optimization disabled
+	L"-Zpr",	//memory out (priority)
+};
+
+IDxcResult* shaderResult = nullptr;
+hr = dxcCompiler->Compile(
+	&shaderSourceBuffer,
+	arguments,
+	_countof(arguments),
+	includeHandler,
+	IID_PPV_ARGS(&shaderResult)
+);
+assert(SUCCEEDED(hr));
+
+//3. check for no warnings or error
+IDxcBlobUtf8* shaderError = nullptr;
+shaderResult->GetOutput(DXC_OUT_ERRORS, IID_PPV_ARGS(&shaderError), nullptr);
+if (shaderError != nullptr && shaderError->GetStringLength() != 0) {
+	Log(shaderError->GetStringPointer());
+	assert(false);
+}
+//4. compile results return
+IDxcBlob* shaderBlob = nullptr;
+hr = shaderResult->GetOutput(DXC_OUT_OBJECT, IID_PPV_ARGS(&shaderBlob), nullptr);
+assert(SUCCEEDED(hr));
+
+Log(ConvertString(std::format(L"Compile Succeeded, path:{}, profile:{}\n", filePath, profile)));
+shaderSource->Release();
+shaderResult->Release();
+
+return shaderBlob;
+
+} ////-----------CompileShader function end-----------/////
+
 
 int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	SetUnhandledExceptionFilter(ExportDump);
@@ -257,13 +319,12 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	rasterizerDesc.FillMode = D3D12_FILL_MODE_SOLID;
 
 	//Shader and Compile
-	IDxcBlob* vertexShaderBlob = CompileShader(L"Object3D.VS.hlsl",
-		L"vs_6_0", dxcUtils, dxcCompiler, includeHandler);
+	IDxcBlob* vertexShaderBlob = CompileShader(L"Object3d.VS.hlsl", L"vs_6_0", dxcUtils, dxcCompiler, includeHandler);
 	assert(vertexShaderBlob != nullptr);
 
-	IDxcBlob* pixelShaderBlob = CompileShader(L"Object3D.PS.hlsl",
-		L"_6_0", dxcUtils, dxcCompiler, includeHandler);
+	IDxcBlob* pixelShaderBlob = CompileShader(L"Object3d.PS.hlsl", L"ps_6_0", dxcUtils, dxcCompiler, includeHandler);
 	assert(pixelShaderBlob != nullptr);
+	//assert(vertexShaderBlob && pixelShaderBlob);
 
 	/*------------PSO end--------------*/
 
@@ -466,70 +527,6 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	IDxcIncludeHandler* includeHandler = nullptr;
 	hr = dxcUtils->CreateDefaultIncludeHandler(&includeHandler);
 	assert(SUCCEEDED(hr));
-
-	//Shader compilation example (Before main loop)
-	IDxcBlob* CompileShader(
-		const std::wstring& filePath,
-		const wchar_t* profile,
-
-		IDxcUtils* dxcUtils,
-		IDxcCompiler3* dxcCompiler,
-		IDxcIncludeHandler* includeHandler)
-
-	//{ ////-----------CompileShader function start-----------/////
-		//1. hlsl file read
-
-		Log(ConvertString(std::format(L"Begin CompileShader, path:{}, profile:{}\n", filePath, profile)));
-
-		IDxcBlobEncoding* shaderSource = nullptr;
-		HRESULT hr = dxcUtils->LoadFile(filePath.c_str(), nullptr, &shaderSource);
-		assert(SUCCEEDED(hr));
-
-		DxcBuffer shaderSourceBuffer;
-		shaderSourceBuffer.Ptr = shaderSource->GetBufferPointer();
-		shaderSourceBuffer.Size = shaderSource->GetBufferSize();
-		shaderSourceBuffer.Encoding = DXC_CP_UTF8;
-		//2. compile
-		LPCWSTR arguments[] = {
-			filePath.c_str(),//entry point (hlsl file name)
-			L"-E", L"main",//entry point path. Fundamentally does not go outside main
-			L"-T", profile,//Shader profile settings
-			L"-Zi", L"-Qembed_debug",//debug information is buried
-			L"-Od",		//optimization disabled
-			L"-Zpr",	//memory out (priority)
-		};
-
-		IDxcResult* shaderResult = nullptr;
-		hr = dxcCompiler->Compile(
-			&shaderSourceBuffer,
-			arguments,
-			_countof(arguments),
-			includeHandler,
-			IID_PPV_ARGS(&shaderResult)
-		);
-		assert(SUCCEEDED(hr));
-
-		//3. check for no warnings or error
-		IDxcBlobUtf8* shaderError = nullptr;
-		shaderResult->GetOutput(DXC_OUT_ERRORS, IID_PPV_ARGS(&shaderError), nullptr);
-		if (shaderError != nullptr && shaderError->GetStringLength() != 0) {
-			Log(shaderError->GetStringPointer());
-			assert(false);
-		}
-		//4. compile results return
-		IDxcBlob* shaderBlob = nullptr;
-		hr = shaderResult->GetOutput(DXC_OUT_OBJECT, IID_PPV_ARGS(&shaderBlob), nullptr);
-		assert(SUCCEEDED(hr));
-
-		Log(ConvertString(std::format(L"Compile Succeeded, path:{}, profile:{}\n", filePath, profile)));
-		shaderSource->Release();
-		shaderResult->Release();
-
-		return shaderBlob;
-
-	//} ////-----------CompileShader function end-----------/////
-
-
 
 	//Debug Layer
 #ifdef _DEBUG
