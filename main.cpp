@@ -197,6 +197,10 @@ Matrix4x4 MakePerspectiveFovMatrix(float fovY, float aspectRatio, float nearClip
 
 Matrix4x4 Inverse4x4(Matrix4x4 matrix) {
 	Matrix4x4 result;
+	float determinantB = 0.0f;
+	// ... (determinant calculation logic)
+
+	float invDetB = 1.0f / determinantB;
 	// ... (inverse calculation logic)
 	return result;
 }
@@ -207,6 +211,11 @@ Transform transform = {
 	{ 0.0f, 0.0f, 0.0f, 1.0f }  // translate
 };
 
+Transform cameraTransform = {
+	{ 1.0f, 1.0f, 1.0f, 1.0f }, // scale
+	{ 0.0f, 0.0f, 0.0f, 1.0f }, // rotate
+	{ 0.0f, 0.0f, -5.0f, 1.0f } // translate (move camera back along z-axis)
+};
 
 
 // Forward declarations to fix C3861: 'ConvertString' identifier not found
@@ -823,10 +832,8 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			Matrix4x4 cameraMatrix = MakeAffineMatrix(transform.scale, transform.rotate, transform.translate);
 			Matrix4x4 viewMatrix = Inverse4x4(cameraMatrix);
 			Matrix4x4 projectionMatrix = MakePerspectiveFovMatrix(0.45f, float(kClientWidth) / float(kClientHeight), 0.1f, 100.0f);
-			Matrix4x4 worldViewProjectionMatrix = Multiply(projectionMatrix, Multiply(viewMatrix, projectionMatrix));
+			Matrix4x4 worldViewProjectionMatrix = Multiply(worldMatrix, Multiply(viewMatrix, projectionMatrix));
 			//*transformMatrixData = worldViewProjectionMatrix;
-
-
 
 			// === Render ===
 			UINT backBufferIndex = swapChain->GetCurrentBackBufferIndex();
