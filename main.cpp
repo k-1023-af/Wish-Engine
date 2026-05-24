@@ -12,6 +12,7 @@
 #include <dbghelp.h>
 #include <dxgidebug.h>
 #include <dxcapi.h>
+#include <cmath>
 
 #pragma comment(lib, "dxcompiler.lib")
 
@@ -27,6 +28,194 @@ const int32_t kClientHeight = 720;
 struct Vector4 {
 	float x, y, z, w;
 };
+
+struct Matrix4x4 {
+	float m[4][4];
+};
+
+struct Transform {
+	Vector4 scale;
+	Vector4 rotate;
+	Vector4 translate;
+};
+
+Matrix4x4 MakeIdentity4x4(Matrix4x4& matrix) {
+	for (int i = 0; i < 4; ++i) {
+		for (int j = 0; j < 4; ++j) {
+			matrix.m[i][j] = (i == j) ? 1.0f : 0.0f;
+		}
+	}
+	return matrix;
+}
+
+Matrix4x4 Multiply(Matrix4x4 a, Matrix4x4 b) {
+	Matrix4x4 result;
+	for (int row = 0; row < 4; ++row) {
+		for (int column = 0; column < 4; ++column) {
+			result.m[row][column] = 0.0f;
+			for (int k = 0; k < 4; ++k) {
+				result.m[row][column] += a.m[row][k] * b.m[k][column];
+			}
+		}
+	}
+	return result;
+}
+
+Matrix4x4 MakeRotatedXYZMatrix(Matrix4x4 x, Matrix4x4 y, Matrix4x4 z) {
+	Matrix4x4 result = Multiply(x, Multiply(y, z));
+	return result;
+}
+
+Matrix4x4 MakeRotateXMatrix(float radian) {
+	Matrix4x4 result;
+	result.m[0][0] = 1;
+	result.m[0][1] = 0;
+	result.m[0][2] = 0;
+	result.m[0][3] = 0;
+
+	result.m[1][0] = 0;
+	result.m[1][1] = std::cos(radian);
+	result.m[1][2] = std::sin(radian);
+	result.m[1][3] = 0;
+
+	result.m[2][0] = 0;
+	result.m[2][1] = -std::sin(radian);
+	result.m[2][2] = std::cos(radian);
+	result.m[2][3] = 0;
+
+	result.m[3][0] = 0;
+	result.m[3][1] = 0;
+	result.m[3][2] = 0;
+	result.m[3][3] = 1;
+
+	return result;
+}
+
+Matrix4x4 MakeRotateYMatrix(float radian) {
+	Matrix4x4 result;
+	result.m[0][0] = std::cos(radian);
+	result.m[0][1] = 0;
+	result.m[0][2] = -std::sin(radian);
+	result.m[0][3] = 0;
+
+	result.m[1][0] = 0;
+	result.m[1][1] = 1;
+	result.m[1][2] = 0;
+	result.m[1][3] = 0;
+
+	result.m[2][0] = std::sin(radian);
+	result.m[2][1] = 0;
+	result.m[2][2] = std::cos(radian);
+	result.m[2][3] = 0;
+
+	result.m[3][0] = 0;
+	result.m[3][1] = 0;
+	result.m[3][2] = 0;
+	result.m[3][3] = 1;
+
+	return result;
+}
+
+Matrix4x4 MakeRotateZMatrix(float radian) {
+	Matrix4x4 result;
+	result.m[0][0] = std::cos(radian);
+	result.m[0][1] = std::sin(radian);
+	result.m[0][2] = 0;
+	result.m[0][3] = 0;
+
+	result.m[1][0] = -std::sin(radian);
+	result.m[1][1] = std::cos(radian);
+	result.m[1][2] = 0;
+	result.m[1][3] = 0;
+
+	result.m[2][0] = 0;
+	result.m[2][1] = 0;
+	result.m[2][2] = 1;
+	result.m[2][3] = 0;
+
+	result.m[3][0] = 0;
+	result.m[3][1] = 0;
+	result.m[3][2] = 0;
+	result.m[3][3] = 1;
+
+	return result;
+}
+
+Matrix4x4 MakeAffineMatrix(Vector4 scale, Vector4 rotate, Vector4 translate) {
+	Matrix4x4 rotatedX = MakeRotateXMatrix(rotate.x);
+	Matrix4x4 rotatedY = MakeRotateYMatrix(rotate.y);
+	Matrix4x4 rotatedZ = MakeRotateZMatrix(rotate.z);
+
+	Matrix4x4 rotatedXYZMatrix = MakeRotatedXYZMatrix(rotatedX, rotatedY, rotatedZ);
+
+	Matrix4x4 result;
+	result.m[0][0] = scale.x * rotatedXYZMatrix.m[0][0];
+	result.m[0][1] = scale.x * rotatedXYZMatrix.m[0][1];
+	result.m[0][2] = scale.x * rotatedXYZMatrix.m[0][2];
+	result.m[0][3] = 0;
+
+	result.m[1][0] = scale.y * rotatedXYZMatrix.m[1][0];
+	result.m[1][1] = scale.y * rotatedXYZMatrix.m[1][1];
+	result.m[1][2] = scale.y * rotatedXYZMatrix.m[1][2];
+	result.m[1][3] = 0;
+
+	result.m[2][0] = scale.z * rotatedXYZMatrix.m[2][0];
+	result.m[2][1] = scale.z * rotatedXYZMatrix.m[2][1];
+	result.m[2][2] = scale.z * rotatedXYZMatrix.m[2][2];
+	result.m[2][3] = 0;
+
+	result.m[3][0] = translate.x;
+	result.m[3][1] = translate.y;
+	result.m[3][2] = translate.z;
+	result.m[3][3] = 1;
+
+	return result;
+}
+
+Matrix4x4 MakePerspectiveFovMatrix(float fovY, float aspectRatio, float nearClip, float farClip) {
+	Matrix4x4 result;
+	float f = tanf(fovY / 2.0f);
+	float cotangent = 1.0f / f;
+	result.m[0][0] = (1.0f / aspectRatio) * cotangent;
+	result.m[0][1] = 0;
+	result.m[0][2] = 0;
+	result.m[0][3] = 0;
+	result.m[1][0] = 0;
+	result.m[1][1] = cotangent;
+	result.m[1][2] = 0;
+	result.m[1][3] = 0;
+	result.m[2][0] = 0;
+	result.m[2][1] = 0;
+	result.m[2][2] = (farClip) / (farClip - nearClip);
+	result.m[2][3] = -1;
+	result.m[3][0] = 0;
+	result.m[3][1] = 0;
+	result.m[3][2] = (farClip * (-1 * nearClip)) / (farClip - nearClip);
+	result.m[3][3] = 0;
+	return result;
+}
+
+Matrix4x4 Inverse(Matrix4x4 matrix) {
+	//float det;
+	Matrix4x4 inverse = MakeAffineMatrix(
+		{ -1.0f, -1.0f, -1.0f },	
+		{ -0.0f, -0.0f, -0.0f }, 
+		{ -matrix.m[3][0], -matrix.m[3][1], -matrix.m[3][2] });
+	return inverse;
+}
+
+Transform transform = {
+	{ 1.0f, 1.0f, 1.0f, 1.0f }, // scale
+	{ 0.0f, 0.0f, 0.0f, 1.0f }, // rotate
+	{ 0.0f, 0.0f, 0.0f, 1.0f }  // translate
+};
+
+Transform cameraTransform = {
+	{ 1.0f, 1.0f, 1.0f, 1.0f }, // scale
+	{ 0.0f, 0.0f, 0.0f, 1.0f }, // rotate
+	{ 0.0f, 0.0f, -5.0f, 1.0f } // translate (move camera back along z-axis)
+};
+
 
 // Forward declarations to fix C3861: 'ConvertString' identifier not found
 std::wstring ConvertString(const std::string& str);
@@ -191,8 +380,57 @@ return shaderBlob;
 } ////-----------CompileShader function end-----------/////
 
 
+// Helper function to create an Upload Heap Buffer
+ID3D12Resource* CreateBufferResource(ID3D12Device* device, size_t sizeInBytes)
+{
+	// Heap properties for Upload heap (CPU writable)
+	D3D12_HEAP_PROPERTIES uploadHeapProperties{};
+	uploadHeapProperties.Type = D3D12_HEAP_TYPE_UPLOAD;
+	uploadHeapProperties.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN;
+	uploadHeapProperties.MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN;
+
+	// Resource description for buffer
+	D3D12_RESOURCE_DESC resourceDesc{};
+	resourceDesc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
+	resourceDesc.Width = sizeInBytes;                    // Size in bytes
+	resourceDesc.Height = 1;
+	resourceDesc.DepthOrArraySize = 1;
+	resourceDesc.MipLevels = 1;
+	resourceDesc.SampleDesc.Count = 1;
+	resourceDesc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+
+	ID3D12Resource* resource = nullptr;
+
+	HRESULT hr = device->CreateCommittedResource(
+		&uploadHeapProperties,                  // Heap properties
+		D3D12_HEAP_FLAG_NONE,                   // Heap flags
+		&resourceDesc,                          // Resource description
+		D3D12_RESOURCE_STATE_GENERIC_READ,      // Initial state
+		nullptr,                                // Clear value (not needed for buffers)
+		IID_PPV_ARGS(&resource)                 // Output resource
+	);
+
+	assert(SUCCEEDED(hr));
+	if (FAILED(hr)) {
+		Log("Failed to create buffer resource!\n");
+		return nullptr;
+	}
+
+	return resource;
+}
+
+
 int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	SetUnhandledExceptionFilter(ExportDump);
+
+	//Debug Layer
+#ifdef _DEBUG
+	ID3D12Debug1* debugController = nullptr;
+	if (SUCCEEDED(D3D12GetDebugInterface(IID_PPV_ARGS(&debugController)))) {
+		debugController->EnableDebugLayer();
+		debugController->SetEnableGPUBasedValidation(TRUE);
+	}
+#endif
 
 	WNDCLASS wc{};
 
@@ -233,15 +471,6 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	IDXGIFactory7* dxgiFactory = nullptr;
 	//HRESULTはWindows系のエラーコードであり、
 	//関数が成功したかどうかをSUCCEEDEDマクロで判定できる
-
-		//Debug Layer
-#ifdef _DEBUG
-	ID3D12Debug1* debugController = nullptr;
-	if (SUCCEEDED(D3D12GetDebugInterface(IID_PPV_ARGS(&debugController)))) {
-		debugController->EnableDebugLayer();
-		debugController->SetEnableGPUBasedValidation(TRUE);
-	}
-#endif
 
 	HRESULT hr = CreateDXGIFactory(IID_PPV_ARGS(&dxgiFactory));
 
@@ -326,16 +555,23 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	descriptionRootSignature.Flags =
 		D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
 	
-	D3D12_ROOT_PARAMETER rootParameters[1]{};
+	D3D12_ROOT_PARAMETER rootParameters[2]{};
 	rootParameters[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
 	rootParameters[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
 	rootParameters[0].Descriptor.ShaderRegister = 0;
+	rootParameters[1].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
+	rootParameters[1].ShaderVisibility = D3D12_SHADER_VISIBILITY_VERTEX;
+	rootParameters[1].Descriptor.ShaderRegister = 0;
 	descriptionRootSignature.pParameters = rootParameters;
 	descriptionRootSignature.NumParameters = _countof(rootParameters);
+
+	//WVP Resource (For use for one size)
+	ID3D12Resource* wvpResource = CreateBufferResource(device, sizeof(Matrix4x4));
+	Matrix4x4* wvpData = nullptr;
+	wvpResource->Map(0, nullptr, reinterpret_cast<void**>(&wvpData));
+	MakeIdentity4x4(*wvpData);	//Identity matrix for WVP (World-View-Projection)
 	
 	//Material Resource (For simplicity, using a single color as material data. In a real application, this would likely be more complex and involve textures, multiple parameters, etc.)
-	ID3D12Resource* CreateBufferResource(ID3D12Device * device, size_t sizeInBytes);
-	//ID3D12Resource* vertexResource = CreateBufferResource(device, sizeof(Vector4) * 3);
 	ID3D12Resource* materialResource = CreateBufferResource(device, sizeof(Vector4));
 	Vector4* materialData = nullptr;
 	materialResource->Map(0, nullptr, reinterpret_cast<void**>(&materialData));
@@ -538,6 +774,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	commandList->IASetVertexBuffers(0, 1, &vertexBufferView);
 	commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 	commandList->SetGraphicsRootConstantBufferView(0, materialResource->GetGPUVirtualAddress());
+	commandList->SetGraphicsRootConstantBufferView(1, wvpResource->GetGPUVirtualAddress());
 	commandList->DrawInstanced(3, 1, 0, 0);
 
 
@@ -576,20 +813,77 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	hr = commandAllocator->Reset();
 	assert(SUCCEEDED(hr));
 
-
-
 	Log("Complete create D3D12Device!!!\n");
 
 	MSG msg{};
-
 	while (msg.message != WM_QUIT) {
 		if (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE)) {
 			TranslateMessage(&msg);
 			DispatchMessage(&msg);
 		}
 		else {
-			//ゲームの処理
+			// === Update ===
+			transform.rotate.y += 0.03f;           // or better: use delta time
+			Matrix4x4 worldMatrix = MakeAffineMatrix(transform.scale, transform.rotate, transform.translate);
+			*wvpData = worldMatrix;
 
+
+			Matrix4x4 cameraMatrix = MakeAffineMatrix(transform.scale, transform.rotate, transform.translate);
+			Matrix4x4 viewMatrix = Inverse(cameraMatrix);
+			Matrix4x4 projectionMatrix = MakePerspectiveFovMatrix(0.45f, float(kClientWidth) / float(kClientHeight), 0.1f, 100.0f);
+			Matrix4x4 worldViewProjectionMatrix = Multiply(worldMatrix, Multiply(viewMatrix, projectionMatrix));
+			//*transformMatrixData = worldViewProjectionMatrix;
+
+			// === Render ===
+			UINT backBufferIndex = swapChain->GetCurrentBackBufferIndex();
+
+			// Reset command list
+			commandAllocator->Reset();
+			commandList->Reset(commandAllocator, nullptr);
+
+			// Transition to Render Target
+			barrier.Transition.pResource = swapChainResources[backBufferIndex];
+			barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_PRESENT;
+			barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_RENDER_TARGET;
+			commandList->ResourceBarrier(1, &barrier);
+
+			commandList->ClearRenderTargetView(rtvHandles[backBufferIndex], clearColor, 0, nullptr);
+			commandList->OMSetRenderTargets(1, &rtvHandles[backBufferIndex], false, nullptr);
+
+			commandList->RSSetViewports(1, &viewport);
+			commandList->RSSetScissorRects(1, &scissorRect);
+
+			commandList->SetGraphicsRootSignature(rootSignature);
+			commandList->SetPipelineState(graphicsPipelineState);
+			commandList->IASetVertexBuffers(0, 1, &vertexBufferView);
+			commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+
+			commandList->SetGraphicsRootConstantBufferView(0, materialResource->GetGPUVirtualAddress());
+			commandList->SetGraphicsRootConstantBufferView(1, wvpResource->GetGPUVirtualAddress());
+
+			commandList->DrawInstanced(3, 1, 0, 0);
+
+			// Transition back to Present
+			barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_RENDER_TARGET;
+			barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_PRESENT;
+			commandList->ResourceBarrier(1, &barrier);
+
+			commandList->Close();
+
+			// Execute
+			ID3D12CommandList* commandLists[] = { commandList };
+			commandQueue->ExecuteCommandLists(1, commandLists);
+
+			swapChain->Present(1, 0);
+
+			// Fence synchronization
+			fenceValue++;
+			commandQueue->Signal(fence, fenceValue);
+
+			if (fence->GetCompletedValue() < fenceValue) {
+				fence->SetEventOnCompletion(fenceValue, fenceEvent);
+				WaitForSingleObject(fenceEvent, INFINITE);
+			}
 		}
 	}
 	
