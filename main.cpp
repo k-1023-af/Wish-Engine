@@ -195,14 +195,13 @@ Matrix4x4 MakePerspectiveFovMatrix(float fovY, float aspectRatio, float nearClip
 	return result;
 }
 
-Matrix4x4 Inverse4x4(Matrix4x4 matrix) {
-	Matrix4x4 result;
-	float determinantB = 0.0f;
-	// ... (determinant calculation logic)
-
-	float invDetB = 1.0f / determinantB;
-	// ... (inverse calculation logic)
-	return result;
+Matrix4x4 Inverse(Matrix4x4 matrix) {
+	//float det;
+	Matrix4x4 inverse = MakeAffineMatrix(
+		{ -1.0f, -1.0f, -1.0f },	
+		{ -0.0f, -0.0f, -0.0f }, 
+		{ -matrix.m[3][0], -matrix.m[3][1], -matrix.m[3][2] });
+	return inverse;
 }
 
 Transform transform = {
@@ -830,7 +829,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 
 			Matrix4x4 cameraMatrix = MakeAffineMatrix(transform.scale, transform.rotate, transform.translate);
-			Matrix4x4 viewMatrix = Inverse4x4(cameraMatrix);
+			Matrix4x4 viewMatrix = Inverse(cameraMatrix);
 			Matrix4x4 projectionMatrix = MakePerspectiveFovMatrix(0.45f, float(kClientWidth) / float(kClientHeight), 0.1f, 100.0f);
 			Matrix4x4 worldViewProjectionMatrix = Multiply(worldMatrix, Multiply(viewMatrix, projectionMatrix));
 			//*transformMatrixData = worldViewProjectionMatrix;
