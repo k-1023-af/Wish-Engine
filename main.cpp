@@ -13,6 +13,12 @@
 #include <dxgidebug.h>
 #include <dxcapi.h>
 #include <cmath>
+#ifdef USE_IMGUI
+#include "externals/imgui/imgui.h"
+#include "externals/imgui/imgui_impl_dx12.h"
+#include "externals/imgui/imgui_impl_win32.h"
+extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
+#endif
 
 #pragma comment(lib, "dxcompiler.lib")
 
@@ -195,12 +201,98 @@ Matrix4x4 MakePerspectiveFovMatrix(float fovY, float aspectRatio, float nearClip
 	return result;
 }
 
-Matrix4x4 Inverse(Matrix4x4 matrix) {
-	//float det;
-	Matrix4x4 inverse = MakeAffineMatrix(
-		{ -1.0f, -1.0f, -1.0f },	
-		{ -0.0f, -0.0f, -0.0f }, 
-		{ -matrix.m[3][0], -matrix.m[3][1], -matrix.m[3][2] });
+Matrix4x4 Inverse(Matrix4x4 m) {
+	Matrix4x4 inverse;
+
+	float determinant =
+
+		(m.m[0][0] * m.m[1][1] * m.m[2][2] * m.m[3][3]) +
+		(m.m[0][0] * m.m[1][2] * m.m[2][3] * m.m[3][1]) +
+		(m.m[0][0] * m.m[1][3] * m.m[2][1] * m.m[3][2]) -
+
+		(m.m[0][0] * m.m[1][3] * m.m[2][2] * m.m[3][1]) -
+		(m.m[0][0] * m.m[1][2] * m.m[2][1] * m.m[3][3]) -
+		(m.m[0][0] * m.m[1][1] * m.m[2][3] * m.m[3][2]) -
+
+		(m.m[0][1] * m.m[1][0] * m.m[2][2] * m.m[3][3]) -
+		(m.m[0][2] * m.m[1][0] * m.m[2][3] * m.m[3][1]) -
+		(m.m[0][3] * m.m[1][0] * m.m[2][1] * m.m[3][2]) +
+
+		(m.m[0][3] * m.m[1][0] * m.m[2][2] * m.m[3][1]) +
+		(m.m[0][2] * m.m[1][0] * m.m[2][1] * m.m[3][3]) +
+		(m.m[0][1] * m.m[1][0] * m.m[2][3] * m.m[3][2]) +
+
+		(m.m[0][1] * m.m[1][2] * m.m[2][0] * m.m[3][3]) +
+		(m.m[0][2] * m.m[1][3] * m.m[2][0] * m.m[3][1]) +
+		(m.m[0][3] * m.m[1][1] * m.m[2][0] * m.m[3][2]) -
+
+		(m.m[0][3] * m.m[1][2] * m.m[2][0] * m.m[3][1]) -
+		(m.m[0][2] * m.m[1][1] * m.m[2][0] * m.m[3][3]) -
+		(m.m[0][1] * m.m[1][3] * m.m[2][0] * m.m[3][2]) -
+
+		(m.m[0][1] * m.m[1][2] * m.m[2][3] * m.m[3][0]) -
+		(m.m[0][2] * m.m[1][3] * m.m[2][1] * m.m[3][0]) -
+		(m.m[0][3] * m.m[1][1] * m.m[2][2] * m.m[3][0]) +
+
+		(m.m[0][3] * m.m[1][2] * m.m[2][1] * m.m[3][0]) +
+		(m.m[0][2] * m.m[1][1] * m.m[2][3] * m.m[3][0]) +
+		(m.m[0][1] * m.m[1][3] * m.m[2][2] * m.m[3][0]);
+
+
+	float invDet = (1.0f / fabsf(determinant));
+
+	// row 0
+	inverse.m[0][0] = invDet * ((m.m[1][1] * m.m[2][2] * m.m[3][3]) + (m.m[1][2] * m.m[2][3] * m.m[3][1]) + (m.m[1][3] * m.m[2][1] * m.m[3][2]) -
+		(m.m[1][3] * m.m[2][2] * m.m[3][1]) - (m.m[1][2] * m.m[2][1] * m.m[3][3]) - (m.m[1][1] * m.m[2][3] * m.m[3][2]));
+
+	inverse.m[0][1] = invDet * (-(m.m[0][1] * m.m[2][2] * m.m[3][3]) - (m.m[0][2] * m.m[2][3] * m.m[3][1]) - (m.m[0][3] * m.m[2][1] * m.m[3][2]) +
+		(m.m[0][3] * m.m[2][2] * m.m[3][1]) + (m.m[0][2] * m.m[2][1] * m.m[3][3]) + (m.m[0][1] * m.m[2][3] * m.m[3][2]));
+
+	inverse.m[0][2] = invDet * ((m.m[0][1] * m.m[1][2] * m.m[3][3]) + (m.m[0][2] * m.m[1][3] * m.m[3][1]) + (m.m[0][3] * m.m[1][1] * m.m[3][2]) -
+		(m.m[0][3] * m.m[1][2] * m.m[3][1]) - (m.m[0][2] * m.m[1][1] * m.m[3][3]) - (m.m[0][1] * m.m[1][3] * m.m[3][2]));
+
+	inverse.m[0][3] = invDet * (-(m.m[0][1] * m.m[1][2] * m.m[2][3]) - (m.m[0][2] * m.m[1][3] * m.m[2][1]) - (m.m[0][3] * m.m[1][1] * m.m[2][2]) +
+		(m.m[0][3] * m.m[1][2] * m.m[2][1]) + (m.m[0][2] * m.m[1][1] * m.m[2][3]) + (m.m[0][1] * m.m[1][3] * m.m[2][2]));
+
+	// row 1
+	inverse.m[1][0] = invDet * (-(m.m[1][0] * m.m[2][2] * m.m[3][3]) - (m.m[1][2] * m.m[2][3] * m.m[3][0]) - (m.m[1][3] * m.m[2][0] * m.m[3][2]) +
+		(m.m[1][3] * m.m[2][2] * m.m[3][0]) + (m.m[1][2] * m.m[2][0] * m.m[3][3]) + (m.m[1][0] * m.m[2][3] * m.m[3][2]));
+
+	inverse.m[1][1] = invDet * ((m.m[0][0] * m.m[2][2] * m.m[3][3]) + (m.m[0][2] * m.m[2][3] * m.m[3][0]) + (m.m[0][3] * m.m[2][0] * m.m[3][2]) -
+		(m.m[0][3] * m.m[2][2] * m.m[3][0]) - (m.m[0][2] * m.m[2][0] * m.m[3][3]) - (m.m[0][0] * m.m[2][3] * m.m[3][2]));
+
+	inverse.m[1][2] = invDet * (-(m.m[0][0] * m.m[1][2] * m.m[3][3]) - (m.m[0][2] * m.m[1][3] * m.m[3][0]) - (m.m[0][3] * m.m[1][0] * m.m[3][2]) +
+		(m.m[0][3] * m.m[1][2] * m.m[3][0]) + (m.m[0][2] * m.m[1][0] * m.m[3][3]) + (m.m[0][0] * m.m[1][3] * m.m[3][2]));
+
+	inverse.m[1][3] = invDet * ((m.m[0][0] * m.m[1][2] * m.m[2][3]) + (m.m[0][2] * m.m[1][3] * m.m[2][0]) + (m.m[0][3] * m.m[1][0] * m.m[2][2]) -
+		(m.m[0][3] * m.m[1][2] * m.m[2][0]) - (m.m[0][2] * m.m[1][0] * m.m[2][3]) - (m.m[0][0] * m.m[1][3] * m.m[2][2]));
+
+	// row 2
+	inverse.m[2][0] = invDet * ((m.m[1][0] * m.m[2][1] * m.m[3][3]) + (m.m[1][1] * m.m[2][3] * m.m[3][0]) + (m.m[1][3] * m.m[2][0] * m.m[3][1]) -
+		(m.m[1][3] * m.m[2][1] * m.m[3][0]) - (m.m[1][1] * m.m[2][0] * m.m[3][3]) - (m.m[1][0] * m.m[2][3] * m.m[3][1]));
+
+	inverse.m[2][1] = invDet * (-(m.m[0][0] * m.m[2][1] * m.m[3][3]) - (m.m[0][1] * m.m[2][3] * m.m[3][0]) - (m.m[0][3] * m.m[2][0] * m.m[3][1]) +
+		(m.m[0][3] * m.m[2][1] * m.m[3][0]) + (m.m[0][1] * m.m[2][0] * m.m[3][3]) + (m.m[0][0] * m.m[2][3] * m.m[3][1]));
+
+	inverse.m[2][2] = invDet * ((m.m[0][0] * m.m[1][1] * m.m[3][3]) + (m.m[0][1] * m.m[1][3] * m.m[3][0]) + (m.m[0][3] * m.m[1][0] * m.m[3][1]) -
+		(m.m[0][3] * m.m[1][1] * m.m[3][0]) - (m.m[0][1] * m.m[1][0] * m.m[3][3]) - (m.m[0][0] * m.m[1][3] * m.m[3][1]));
+
+	inverse.m[2][3] = invDet * (-(m.m[0][0] * m.m[1][1] * m.m[2][3]) - (m.m[0][1] * m.m[1][3] * m.m[2][0]) - (m.m[0][3] * m.m[1][0] * m.m[2][1]) +
+		(m.m[0][3] * m.m[1][1] * m.m[2][0]) + (m.m[0][1] * m.m[0][1] * m.m[2][3]) + (m.m[0][0] * m.m[1][3] * m.m[2][1]));
+
+	// row 3
+	inverse.m[3][0] = invDet * (-(m.m[1][0] * m.m[2][1] * m.m[3][2]) - (m.m[1][1] * m.m[2][2] * m.m[3][0]) - (m.m[1][2] * m.m[2][0] * m.m[3][1]) +
+		(m.m[1][2] * m.m[2][1] * m.m[3][0]) + (m.m[1][1] * m.m[2][0] * m.m[3][2]) + (m.m[1][0] * m.m[2][2] * m.m[3][1]));
+
+	inverse.m[3][1] = invDet * ((m.m[0][0] * m.m[2][1] * m.m[3][2]) + (m.m[0][1] * m.m[2][2] * m.m[3][0]) + (m.m[0][2] * m.m[2][0] * m.m[3][1]) -
+		(m.m[0][2] * m.m[2][1] * m.m[3][0]) - (m.m[0][1] * m.m[2][0] * m.m[3][2]) - (m.m[0][0] * m.m[2][2] * m.m[3][1]));
+
+	inverse.m[3][2] = invDet * (-(m.m[0][0] * m.m[1][1] * m.m[3][2]) - (m.m[0][1] * m.m[1][2] * m.m[3][0]) - (m.m[0][2] * m.m[1][0] * m.m[3][1]) +
+		(m.m[0][2] * m.m[1][1] * m.m[3][0]) + (m.m[0][1] * m.m[1][0] * m.m[3][2]) + (m.m[0][0] * m.m[1][2] * m.m[3][1]));
+
+	inverse.m[3][3] = invDet * ((m.m[0][0] * m.m[1][1] * m.m[2][2]) + (m.m[0][1] * m.m[1][2] * m.m[2][0]) + (m.m[0][2] * m.m[1][0] * m.m[2][1]) -
+		(m.m[0][2] * m.m[1][1] * m.m[2][0]) - (m.m[0][1] * m.m[1][0] * m.m[2][2]) - (m.m[0][0] * m.m[1][2] * m.m[2][1]));
+
 	return inverse;
 }
 
@@ -288,6 +380,10 @@ std::string ConvertString(const std::wstring& str) {
 
 
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
+	if (ImGui_ImplWin32_WndProcHandler(hwnd, msg, wparam, lparam)) {
+		return true;
+	}
+
 	switch (msg) {
 	case WM_DESTROY:
 		PostQuitMessage(0);
@@ -417,6 +513,20 @@ ID3D12Resource* CreateBufferResource(ID3D12Device* device, size_t sizeInBytes)
 	}
 
 	return resource;
+}
+
+//Healper function to create Descriptor Heap
+ID3D12DescriptorHeap* CreateDescriptorHeap(
+	ID3D12Device* device, D3D12_DESCRIPTOR_HEAP_TYPE heapType, UINT numDescriptors, bool shaderVisible)
+{
+	ID3D12DescriptorHeap* descriptorHeap = nullptr;
+	D3D12_DESCRIPTOR_HEAP_DESC descriptorHeapDesc{};
+	descriptorHeapDesc.Type = heapType;
+	descriptorHeapDesc.NumDescriptors = numDescriptors;
+	descriptorHeapDesc.Flags = shaderVisible ? D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE : D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
+	HRESULT hr = device->CreateDescriptorHeap(&descriptorHeapDesc, IID_PPV_ARGS(&descriptorHeap));
+	assert(SUCCEEDED(hr));
+	return descriptorHeap;
 }
 
 
@@ -723,12 +833,16 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	assert(SUCCEEDED(hr));
 
 	//Descriptor Heap
-	ID3D12DescriptorHeap* rtvDescriptorHeap = nullptr;
+	/*ID3D12DescriptorHeap* rtvDescriptorHeap = nullptr;
 	D3D12_DESCRIPTOR_HEAP_DESC rtvDescriptorHeapDesc{};
 	rtvDescriptorHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
 	rtvDescriptorHeapDesc.NumDescriptors = 2;
 	hr = device->CreateDescriptorHeap(&rtvDescriptorHeapDesc, IID_PPV_ARGS(&rtvDescriptorHeap));
-	assert(SUCCEEDED(hr));
+	assert(SUCCEEDED(hr));*/
+
+
+	ID3D12DescriptorHeap* rtvDescriptorHeap = CreateDescriptorHeap(device, D3D12_DESCRIPTOR_HEAP_TYPE_RTV, 2, false);
+	ID3D12DescriptorHeap* srvDescriptorHeap = CreateDescriptorHeap(device, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 128, true);
 
 	//Pull Resources from Swap Chain
 	ID3D12Resource* swapChainResources[2] = { nullptr };
@@ -813,6 +927,19 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	hr = commandAllocator->Reset();
 	assert(SUCCEEDED(hr));
 
+	IMGUI_CHECKVERSION();
+	ImGui::CreateContext();
+	ImGui::StyleColorsDark();
+	ImGui_ImplWin32_Init(hwnd);
+	ImGui_ImplDX12_Init(device,
+		swapChainDesc.BufferCount,
+		rtvDesc.Format,
+		srvDescriptorHeap,
+		srvDescriptorHeap->GetCPUDescriptorHandleForHeapStart(),
+		srvDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
+	ImGuiIO& io = ImGui::GetIO();
+	io.Fonts->Build();
+
 	Log("Complete create D3D12Device!!!\n");
 
 	MSG msg{};
@@ -822,17 +949,27 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			DispatchMessage(&msg);
 		}
 		else {
+			//IMGUI start
+			ImGui_ImplDX12_NewFrame();
+			ImGui_ImplWin32_NewFrame();
+			ImGui::NewFrame();
+
+
 			// === Update ===
 			transform.rotate.y += 0.03f;           // or better: use delta time
 			Matrix4x4 worldMatrix = MakeAffineMatrix(transform.scale, transform.rotate, transform.translate);
 			*wvpData = worldMatrix;
 
-
 			Matrix4x4 cameraMatrix = MakeAffineMatrix(transform.scale, transform.rotate, transform.translate);
 			Matrix4x4 viewMatrix = Inverse(cameraMatrix);
 			Matrix4x4 projectionMatrix = MakePerspectiveFovMatrix(0.45f, float(kClientWidth) / float(kClientHeight), 0.1f, 100.0f);
 			Matrix4x4 worldViewProjectionMatrix = Multiply(worldMatrix, Multiply(viewMatrix, projectionMatrix));
-			//*transformMatrixData = worldViewProjectionMatrix;
+			Matrix4x4 transformMatrixData = worldViewProjectionMatrix;
+
+
+			ImGui::ShowDemoWindow();
+
+			ImGui::Render();
 
 			// === Render ===
 			UINT backBufferIndex = swapChain->GetCurrentBackBufferIndex();
@@ -849,6 +986,10 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 			commandList->ClearRenderTargetView(rtvHandles[backBufferIndex], clearColor, 0, nullptr);
 			commandList->OMSetRenderTargets(1, &rtvHandles[backBufferIndex], false, nullptr);
+			
+			//set descriptor heap (required for ImGui)
+			ID3D12DescriptorHeap* descriptorHeaps[] = { srvDescriptorHeap };
+			commandList->SetDescriptorHeaps(1, descriptorHeaps);
 
 			commandList->RSSetViewports(1, &viewport);
 			commandList->RSSetScissorRects(1, &scissorRect);
@@ -862,6 +1003,8 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			commandList->SetGraphicsRootConstantBufferView(1, wvpResource->GetGPUVirtualAddress());
 
 			commandList->DrawInstanced(3, 1, 0, 0);
+
+			ImGui_ImplDX12_RenderDrawData(ImGui::GetDrawData(), commandList);
 
 			// Transition back to Present
 			barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_RENDER_TARGET;
@@ -884,8 +1027,16 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 				fence->SetEventOnCompletion(fenceValue, fenceEvent);
 				WaitForSingleObject(fenceEvent, INFINITE);
 			}
+
+		
 		}
 	}
+
+#ifdef USE_IMGUI
+	ImGui_ImplDX12_Shutdown();
+	ImGui_ImplWin32_Shutdown();
+	ImGui::DestroyContext();
+#endif
 	
 	//Close Handle / Close Window
 	CloseHandle(fenceEvent);
