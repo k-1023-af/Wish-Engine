@@ -31,6 +31,10 @@ extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg
 const int32_t kClientWidth = 1280;
 const int32_t kClientHeight = 720;
 
+struct Vector3 {
+	float x, y, z;
+};
+
 struct Vector4 {
 	float x, y, z, w;
 };
@@ -40,9 +44,9 @@ struct Matrix4x4 {
 };
 
 struct Transform {
-	Vector4 scale;
-	Vector4 rotate;
-	Vector4 translate;
+	Vector3 scale;
+	Vector3 rotate;
+	Vector3 translate;
 };
 
 Matrix4x4 MakeIdentity4x4(Matrix4x4& matrix) {
@@ -147,7 +151,7 @@ Matrix4x4 MakeRotateZMatrix(float radian) {
 	return result;
 }
 
-Matrix4x4 MakeAffineMatrix(Vector4 scale, Vector4 rotate, Vector4 translate) {
+Matrix4x4 MakeAffineMatrix(Vector3 scale, Vector3 rotate, Vector3 translate) {
 	Matrix4x4 rotatedX = MakeRotateXMatrix(rotate.x);
 	Matrix4x4 rotatedY = MakeRotateYMatrix(rotate.y);
 	Matrix4x4 rotatedZ = MakeRotateZMatrix(rotate.z);
@@ -297,15 +301,15 @@ Matrix4x4 Inverse(Matrix4x4 m) {
 }
 
 Transform transform = {
-	{ 1.0f, 1.0f, 1.0f, 1.0f }, // scale
-	{ 0.0f, 0.0f, 0.0f, 1.0f }, // rotate
-	{ 0.0f, 0.0f, 0.0f, 1.0f }  // translate
+	{ 1.0f, 1.0f, 1.0f }, // scale
+	{ 0.0f, 0.0f, 0.0f }, // rotate
+	{ 0.0f, 0.0f, 0.0f }  // translate
 };
 
 Transform cameraTransform = {
-	{ 1.0f, 1.0f, 1.0f, 1.0f }, // scale
-	{ 0.0f, 0.0f, 0.0f, 1.0f }, // rotate
-	{ 0.0f, 0.0f, -5.0f, 1.0f } // translate (move camera back along z-axis)
+	{ 1.0f, 1.0f, 1.0f }, // scale
+	{ 0.0f, 0.0f, 0.0f }, // rotate
+	{ 0.0f, 0.0f, 5.0f } // translate (move camera back along z-axis)
 };
 
 
@@ -832,14 +836,6 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	hr = dxgiFactory->CreateSwapChainForHwnd(commandQueue, hwnd, &swapChainDesc, nullptr, nullptr, reinterpret_cast<IDXGISwapChain1**>(&swapChain));
 	assert(SUCCEEDED(hr));
 
-	//Descriptor Heap
-	/*ID3D12DescriptorHeap* rtvDescriptorHeap = nullptr;
-	D3D12_DESCRIPTOR_HEAP_DESC rtvDescriptorHeapDesc{};
-	rtvDescriptorHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
-	rtvDescriptorHeapDesc.NumDescriptors = 2;
-	hr = device->CreateDescriptorHeap(&rtvDescriptorHeapDesc, IID_PPV_ARGS(&rtvDescriptorHeap));
-	assert(SUCCEEDED(hr));*/
-
 
 	ID3D12DescriptorHeap* rtvDescriptorHeap = CreateDescriptorHeap(device, D3D12_DESCRIPTOR_HEAP_TYPE_RTV, 2, false);
 	ID3D12DescriptorHeap* srvDescriptorHeap = CreateDescriptorHeap(device, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 128, true);
@@ -958,14 +954,12 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			// === Update ===
 			transform.rotate.y += 0.03f;           // or better: use delta time
 			Matrix4x4 worldMatrix = MakeAffineMatrix(transform.scale, transform.rotate, transform.translate);
-			*wvpData = worldMatrix;
-
-			Matrix4x4 cameraMatrix = MakeAffineMatrix(transform.scale, transform.rotate, transform.translate);
+			
+			Matrix4x4 cameraMatrix = MakeAffineMatrix(cameraTransform.scale, cameraTransform.rotate, cameraTransform.translate);
 			Matrix4x4 viewMatrix = Inverse(cameraMatrix);
 			Matrix4x4 projectionMatrix = MakePerspectiveFovMatrix(0.45f, float(kClientWidth) / float(kClientHeight), 0.1f, 100.0f);
 			Matrix4x4 worldViewProjectionMatrix = Multiply(worldMatrix, Multiply(viewMatrix, projectionMatrix));
-			Matrix4x4 transformMatrixData = worldViewProjectionMatrix;
-
+			*wvpData = worldViewProjectionMatrix;
 
 			ImGui::ShowDemoWindow();
 
