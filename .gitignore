@@ -369,3 +369,5 @@ git rm --cached <01_Project.vcxproj.user>
 
 *.dmp
 Dumps/
+
+imgui.ini
