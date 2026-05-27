@@ -195,13 +195,51 @@ Matrix4x4 MakePerspectiveFovMatrix(float fovY, float aspectRatio, float nearClip
 	return result;
 }
 
-Matrix4x4 Inverse(Matrix4x4 matrix) {
-	//float det;
-	Matrix4x4 inverse = MakeAffineMatrix(
-		{ -1.0f, -1.0f, -1.0f },	
-		{ -0.0f, -0.0f, -0.0f }, 
-		{ -matrix.m[3][0], -matrix.m[3][1], -matrix.m[3][2] });
-	return inverse;
+Matrix4x4 Inverse(Matrix4x4& m) {
+	Matrix4x4 inv;
+
+	// Calculate the determinant
+	float a = m.m[0][0], b = m.m[0][1], c = m.m[0][2], d = m.m[0][3];
+	float e = m.m[1][0], f = m.m[1][1], g = m.m[1][2], h = m.m[1][3];
+	float i = m.m[2][0], j = m.m[2][1], k = m.m[2][2], l = m.m[2][3];
+	float mm = m.m[3][0], n = m.m[3][1], o = m.m[3][2], p = m.m[3][3];
+
+	float det =
+		a * (f * (k * p - l * o) - g * (j * p - l * n) + h * (j * o - k * n)) -
+		b * (e * (k * p - l * o) - g * (i * p - l * mm) + h * (i * o - k * mm)) +
+		c * (e * (j * p - l * n) - f * (i * p - l * mm) + h * (i * n - j * mm)) -
+		d * (e * (j * o - k * n) - f * (i * o - k * mm) + g * (i * n - j * mm));
+
+	if (fabsf(det) < 0.000001f) {
+		// Singular matrix - return identity as fallback
+		MakeIdentity4x4(inv);
+		return inv;
+	}
+
+	float invDet = 1.0f / det;
+
+	// Calculate inverse using adjugate matrix
+	inv.m[0][0] = invDet * (f * (k * p - l * o) - g * (j * p - l * n) + h * (j * o - k * n));
+	inv.m[0][1] = invDet * -(b * (k * p - l * o) - c * (j * p - l * n) + d * (j * o - k * n));
+	inv.m[0][2] = invDet * (b * (g * p - h * o) - c * (f * p - h * n) + d * (f * o - g * n));
+	inv.m[0][3] = invDet * -(b * (g * l - h * k) - c * (f * l - h * j) + d * (f * k - g * j));
+
+	inv.m[1][0] = invDet * -(e * (k * p - l * o) - g * (i * p - l * mm) + h * (i * o - k * mm));
+	inv.m[1][1] = invDet * (a * (k * p - l * o) - c * (i * p - l * mm) + d * (i * o - k * mm));
+	inv.m[1][2] = invDet * -(a * (g * p - h * o) - c * (e * p - h * mm) + d * (e * o - g * mm));
+	inv.m[1][3] = invDet * (a * (g * l - h * k) - c * (e * l - h * i) + d * (e * k - g * i));
+
+	inv.m[2][0] = invDet * (e * (j * p - l * n) - f * (i * p - l * mm) + h * (i * n - j * mm));
+	inv.m[2][1] = invDet * -(a * (j * p - l * n) - b * (i * p - l * mm) + d * (i * n - j * mm));
+	inv.m[2][2] = invDet * (a * (f * p - h * n) - b * (e * p - h * mm) + d * (e * n - f * mm));
+	inv.m[2][3] = invDet * -(a * (f * l - h * j) - b * (e * l - h * i) + d * (e * j - f * i));
+
+	inv.m[3][0] = invDet * -(e * (j * o - k * n) - f * (i * o - k * mm) + g * (i * n - j * mm));
+	inv.m[3][1] = invDet * (a * (j * o - k * n) - b * (i * o - k * mm) + c * (i * n - j * mm));
+	inv.m[3][2] = invDet * -(a * (f * o - g * n) - b * (e * o - g * mm) + c * (e * n - f * mm));
+	inv.m[3][3] = invDet * (a * (f * k - g * j) - b * (e * k - g * i) + c * (e * j - f * i));
+
+	return inv;
 }
 
 Transform transform = {
@@ -213,8 +251,10 @@ Transform transform = {
 Transform cameraTransform = {
 	{ 1.0f, 1.0f, 1.0f, 1.0f }, // scale
 	{ 0.0f, 0.0f, 0.0f, 1.0f }, // rotate
-	{ 0.0f, 0.0f, -5.0f, 1.0f } // translate (move camera back along z-axis)
+	{ 0.0f, 0.0f, -5.0f, 1.0f} // translate (move camera back along z-axis)
 };
+
+//Matrix4x4 projectionMatrix = MakePerspectiveFovMatrix(0.45f, float(kClientWidth) / float(kClientHeight), 0.1f, 100.0f);
 
 
 // Forward declarations to fix C3861: 'ConvertString' identifier not found
@@ -558,10 +598,12 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	D3D12_ROOT_PARAMETER rootParameters[2]{};
 	rootParameters[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
 	rootParameters[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
-	rootParameters[0].Descriptor.ShaderRegister = 0;
+	rootParameters[0].Descriptor.ShaderRegister = 0; //Material (Pixel Shader)
+
 	rootParameters[1].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
 	rootParameters[1].ShaderVisibility = D3D12_SHADER_VISIBILITY_VERTEX;
-	rootParameters[1].Descriptor.ShaderRegister = 0;
+	rootParameters[1].Descriptor.ShaderRegister = 1; //WVP (Vertex Shader)
+
 	descriptionRootSignature.pParameters = rootParameters;
 	descriptionRootSignature.NumParameters = _countof(rootParameters);
 
@@ -827,12 +869,11 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			Matrix4x4 worldMatrix = MakeAffineMatrix(transform.scale, transform.rotate, transform.translate);
 			*wvpData = worldMatrix;
 
-
-			Matrix4x4 cameraMatrix = MakeAffineMatrix(transform.scale, transform.rotate, transform.translate);
+			Matrix4x4 cameraMatrix = MakeAffineMatrix(cameraTransform.scale, cameraTransform.rotate, cameraTransform.translate);
 			Matrix4x4 viewMatrix = Inverse(cameraMatrix);
 			Matrix4x4 projectionMatrix = MakePerspectiveFovMatrix(0.45f, float(kClientWidth) / float(kClientHeight), 0.1f, 100.0f);
 			Matrix4x4 worldViewProjectionMatrix = Multiply(worldMatrix, Multiply(viewMatrix, projectionMatrix));
-			//*transformMatrixData = worldViewProjectionMatrix;
+			*wvpData = worldViewProjectionMatrix;
 
 			// === Render ===
 			UINT backBufferIndex = swapChain->GetCurrentBackBufferIndex();
@@ -847,6 +888,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_RENDER_TARGET;
 			commandList->ResourceBarrier(1, &barrier);
 
+			//clear screen
 			commandList->ClearRenderTargetView(rtvHandles[backBufferIndex], clearColor, 0, nullptr);
 			commandList->OMSetRenderTargets(1, &rtvHandles[backBufferIndex], false, nullptr);
 
