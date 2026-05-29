@@ -13,6 +13,7 @@
 #include <dxgidebug.h>
 #include <dxcapi.h>
 #include <cmath>
+#include "externals/DirectXTex/DirectXTex.h"
 #ifdef USE_IMGUI
 #include "externals/imgui/imgui.h"
 #include "externals/imgui/imgui_impl_dx12.h"
@@ -313,6 +314,21 @@ Transform cameraTransform = {
 };
 
 
+void UploadTextureData(ID3D12Resource* texture, const DirectX::ScratchImage& mipImages) {
+	const DirectX::TexMetadata& metadata = mipImages.GetMetadata();
+	for (size_t mipLevel = 0; mipLevel < metadata.mipLevels; ++mipLevel) {
+		const DirectX::Image* img = mipImages.GetImage(mipLevel, 0, 0);
+		HRESULT hr = texture->WriteToSubresource(
+			UINT(mipLevel),
+			nullptr,
+			img->pixels,
+			UINT(img->rowPitch),
+			UINT(img->slicePitch)
+		);
+		assert(SUCCEEDED(hr));
+	}
+}
+
 // Forward declarations to fix C3861: 'ConvertString' identifier not found
 std::wstring ConvertString(const std::string& str);
 std::string ConvertString(const std::wstring& str);
@@ -538,6 +554,8 @@ ID3D12DescriptorHeap* CreateDescriptorHeap(
 int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	SetUnhandledExceptionFilter(ExportDump);
 
+	CoInitializeEx(0, COINIT_MULTITHREADED);
+
 	//Debug Layer
 #ifdef _DEBUG
 	ID3D12Debug1* debugController = nullptr;
@@ -628,6 +646,54 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	}
 
 	assert(device != nullptr);
+
+	DirectX::ScratchImage LoadTexture(const std::string& filePath) {
+		DirectX::ScratchImage image{};
+		std::wstring filePathW = ConvertString(filePath);
+		HRESULT hr = DirectX::LoadFromICFile(filePathW.c_str(), DirectX::WIC_FLAGS_FORCE_SRGB, nullptr, image);
+		assert(SUCCEEDED(hr));
+
+		DirectX::ScratchImage mipImages{};
+		hr = DirectX::GenerateMipMaps(image.GetImages(), image.GetImageCount(), image.GetMetaData(), DirectX::TEX_FILTER_SRGB, 0, mipImages);
+		assert(SUCCEEDED(hr));
+
+		return mipImages;
+	}
+
+	ID3D12Resource* CreateTextureResource(ID3D12Device* device, const DirectX::TexMetadata& metadata) {
+		
+		//1. metadata base resource settings
+		D3D12_RESOURCE_DESC resourceDesc{};
+		resourceDesc.Width = UINT(metadata.width);
+		resourceDesc.Height = UINT(metadata.height);
+		resourceDesc.MipLevels = UINT16(metadata.mipLevels);
+		resourceDesc.DepthOrArraySize = UINT16(metadata.arraySize);
+		resourceDesc.Format = metadata.format;
+		resourceDesc.SampleDesc.Count = 1;
+		resourceDesc.Dimension = D3D12_RESOURCE_DIMENSION(metadata.dimension);
+
+		//2. Heap settings
+		D3D12_HEAP_PROPERTIES heapProperties{};
+		heapProperties.Type = D3D12_HEAP_TYPE_CUSTOM;
+		heapProperties.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_WRITE_BACK;
+		heapProperties.MemoryPoolPreference = D3D12_MEMORY_POOL_L0;
+
+		//3. Create Resource
+		ID3D12Resource* resource = nullptr;
+		HRESULT hr = device->CreateCommittedResource(
+			&heapProperties,
+			D3D12_RESOURCE_STATE_GENERIC_READ,
+			nullptr,
+			IID_PPV_ARGS(&resource));
+		assert(SUCCEEDED(hr));
+
+		return resource;
+	}
+
+	DirectX::ScratchImage mipImages = LoadTexture("Resources/uvChecker.png");
+	const DirectX::TexMetadata& metadata = mipImages.GetMetadata();
+	ID3D12Resource* textureResource = CreateTextureResource(device, metadata);
+	UploadTextureData(textureResource, mipImages);
 
 #ifdef _DEBUG
 	ID3D12InfoQueue* infoQueue = nullptr;
@@ -939,6 +1005,19 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	io.Fonts->Build();
 #endif
 
+	D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc{};
+	srvDesc.Format = metadata.format;
+	srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+	srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+	srvDesc.Texture2D.MipLevels = UINT(metadata.mipLevels);
+
+	D3D12_CPU_DESCRIPTOR_HANDLE textureSrvHandleCPU = srvDescriptorHeap->GetCPUDescriptorHandleForHeapStart();
+	D3D12_GPU_DESCRIPTOR_HANDLE textureSrvHandleGPU = srvDescriptorHeap->GetGPUDescriptorHandleForHeapStart();
+	textureSrvHandleCPU.ptr += device->GetDescriptoerHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+	textureSrvHandleGPU.prt += device->GetDescriptoerHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+
+	device->CreateShaderResourceView(textureResource, &srvDesc, textureSrvHandleCPU);
+
 	Log("Complete create D3D12Device!!!\n");
 
 	MSG msg{};
@@ -1028,6 +1107,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			}
 
 		
+			CoUninitialize();
 		}
 	}
 
