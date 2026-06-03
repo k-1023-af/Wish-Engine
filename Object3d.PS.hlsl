@@ -3,7 +3,7 @@
 struct Material{
     float4 color;
 };
-ConstantBuffer<Material> gMaterial : register(b0);
+ConstantBuffer<Material> gMaterial : register(b1);
 
 Texture2D<float> gTexture : register(t0);
 SamplerState gSampler : register(s0);
