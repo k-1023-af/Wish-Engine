@@ -526,43 +526,34 @@ return shaderBlob;
 // Helper function to create an Upload Heap Buffer
 ID3D12Resource* CreateBufferResource(ID3D12Device* device, size_t sizeInBytes)
 {
-	//// Heap properties for Upload heap (CPU writable)
-	//D3D12_HEAP_PROPERTIES uploadHeapProperties{};
-	//uploadHeapProperties.Type = D3D12_HEAP_TYPE_DEFAULT;
-	//
-	//uploadHeapProperties.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN;
-	//uploadHeapProperties.MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN;
-
-
+	// Cleaned up the unused struct. 
 	D3D12_HEAP_PROPERTIES heapProperties{};
-	heapProperties.Type = D3D12_HEAP_TYPE_UPLOAD; //change to custom heap type
-	//heapProperties.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_WRITE_BACK;
-	//heapProperties.MemoryPoolPreference = D3D12_MEMORY_POOL_L0;
+	heapProperties.Type = D3D12_HEAP_TYPE_UPLOAD;
+	heapProperties.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN;      // ✅ Fixed
+	heapProperties.MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN;       // ✅ Fixed
 
 	// Resource description for buffer
 	D3D12_RESOURCE_DESC resourceDesc{};
 	resourceDesc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
-	resourceDesc.Width = sizeInBytes;                    // Size in bytes
+	resourceDesc.Width = sizeInBytes;
 	resourceDesc.Height = 1;
 	resourceDesc.DepthOrArraySize = 1;
 	resourceDesc.MipLevels = 1;
 	resourceDesc.SampleDesc.Count = 1;
 	resourceDesc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
-	//resourceDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL;
-	//resourceDesc.Format = DXGI_FORMAT_D24_UNORM_S8_UINT;
 
-	D3D12_CLEAR_VALUE depthClearValue{};
-	depthClearValue.DepthStencil.Depth = 1.0f; //最大値　でクリア
-	depthClearValue.Format = DXGI_FORMAT_D24_UNORM_S8_UINT;
+	// ⚠️ FIXED SECONDARY BUG HERE: Buffers cannot be Depth Stencils!
+	resourceDesc.Flags = D3D12_RESOURCE_FLAG_NONE;
+	resourceDesc.Format = DXGI_FORMAT_UNKNOWN;
 
 	ID3D12Resource* resource = nullptr;
 	HRESULT hr = device->CreateCommittedResource(
-		&heapProperties,					 // Heap properties
-		D3D12_HEAP_FLAG_NONE,                   // Heap flags
-		&resourceDesc,                          // Resource description
-		D3D12_RESOURCE_STATE_GENERIC_READ,      // Initial state
-		nullptr,                       // Clear value (not needed for buffers)
-		IID_PPV_ARGS(&resource)                 // Output resource
+		&heapProperties,
+		D3D12_HEAP_FLAG_NONE,
+		&resourceDesc,
+		D3D12_RESOURCE_STATE_GENERIC_READ,
+		nullptr,
+		IID_PPV_ARGS(&resource)
 	);
 
 	assert(SUCCEEDED(hr));
@@ -586,13 +577,13 @@ ID3D12Resource* CreateTextureResource(ID3D12Device* device, const DirectX::TexMe
 	resourceDesc.SampleDesc.Count = 1;
 	resourceDesc.Dimension = D3D12_RESOURCE_DIMENSION(metadata.dimension);
 	resourceDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
-	resourceDesc.Flags = D3D12_RESOURCE_FLAG_NONE; // ← バッファに深度フラグは不要
+	resourceDesc.Flags = D3D12_RESOURCE_FLAG_NONE;
 
 	//2. Heap settings
 	D3D12_HEAP_PROPERTIES heapProperties{};
 	heapProperties.Type = D3D12_HEAP_TYPE_DEFAULT;
-	//heapProperties.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_WRITE_BACK;
-	//heapProperties.MemoryPoolPreference = D3D12_MEMORY_POOL_L0;
+	heapProperties.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN;      // ✅ Fixed
+	heapProperties.MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN;       // ✅ Fixed
 
 	//3. Create Resource
 	ID3D12Resource* resource = nullptr;
@@ -600,7 +591,7 @@ ID3D12Resource* CreateTextureResource(ID3D12Device* device, const DirectX::TexMe
 		&heapProperties,
 		D3D12_HEAP_FLAG_NONE,
 		&resourceDesc,
-		D3D12_RESOURCE_STATE_COPY_DEST, //D3D12_RESOURCE_STATE_GENERIC_READ,
+		D3D12_RESOURCE_STATE_COPY_DEST,
 		nullptr,
 		IID_PPV_ARGS(&resource));
 	if (FAILED(hr)) {
@@ -620,33 +611,29 @@ ID3D12Resource* CreateDepthStencilTextureResource(ID3D12Device* device, UINT wid
 	resourceDesc.MipLevels = 1;
 	resourceDesc.Format = DXGI_FORMAT_D24_UNORM_S8_UINT;
 	resourceDesc.SampleDesc.Count = 1;
-	//resourceDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+	resourceDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
 	resourceDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL;
 
 	D3D12_HEAP_PROPERTIES heapProperties{};
-	heapProperties.Type = D3D12_HEAP_TYPE_DEFAULT; //change to custom heap type
-	//heapProperties.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_WRITE_BACK;
-	//heapProperties.MemoryPoolPreference = D3D12_MEMORY_POOL_L0;
+	heapProperties.Type = D3D12_HEAP_TYPE_DEFAULT;
+	heapProperties.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN;      // ✅ Fixed
+	heapProperties.MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN;       // ✅ Fixed
 
 	D3D12_CLEAR_VALUE depthClearValue{};
-	depthClearValue.DepthStencil.Depth = 1.0f; //最大値　でクリア
-	//depthClearValue.DepthStencil.Stencil = 0;
+	depthClearValue.DepthStencil.Depth = 1.0f;
 	depthClearValue.Format = DXGI_FORMAT_D24_UNORM_S8_UINT;
 
 	ID3D12Resource* resource = nullptr;
 	HRESULT hr = device->CreateCommittedResource(
-		&heapProperties,                  // Heap properties
-		D3D12_HEAP_FLAG_NONE,                   // Heap flags
-		&resourceDesc,                          // Resource description
-		D3D12_RESOURCE_STATE_DEPTH_WRITE,      // Initial state
-		&depthClearValue,                                // Clear value
-		IID_PPV_ARGS(&resource)                 // Output resource
+		&heapProperties,
+		D3D12_HEAP_FLAG_NONE,
+		&resourceDesc,
+		D3D12_RESOURCE_STATE_DEPTH_WRITE,
+		&depthClearValue,
+		IID_PPV_ARGS(&resource)
 	);
 	assert(SUCCEEDED(hr));
-	//if (FAILED(hr)) {
-	//	Log("Failed to create depth stencil resource!\n");
-	//	return nullptr;
-	//}
+
 	return resource;
 }
 
@@ -679,7 +666,7 @@ ID3D12Resource* UploadTextureData(ID3D12Resource* texture, const DirectX::Scratc
 
 	D3D12_RESOURCE_BARRIER barrier = {};
 	barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-	//barrier.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
+	barrier.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
 	barrier.Transition.pResource = texture;
 	barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
 	barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_COPY_DEST;
@@ -852,7 +839,6 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	const DirectX::TexMetadata& metadata = mipImages.GetMetadata();
 	ID3D12Resource* textureResource = CreateTextureResource(device, metadata);
 	//UploadTextureData(textureResource, mipImages);
-	ID3D12Resource* intermediateResource = UploadTextureData(textureResource, mipImages, device, commandList);
 
 	//Swap Chain
 	IDXGISwapChain4* swapChain = nullptr;
@@ -865,30 +851,21 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	swapChainDesc.BufferCount = 2;
 	swapChainDesc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
 	//create by passing a command queue and window handle
-	//hr = dxgiFactory->CreateSwapChainForHwnd(commandQueue, hwnd, &swapChainDesc, nullptr, nullptr, reinterpret_cast<IDXGISwapChain1**>(&swapChain));
-	//assert(SUCCEEDED(hr));
-
-	//Depth Stencil Buffer
-	ID3D12Resource* depthStencilResource = CreateDepthStencilTextureResource(device, kClientWidth, kClientHeight);
-	ID3D12DescriptorHeap* dsvDescriptorHeap = CreateDescriptorHeap(device, D3D12_DESCRIPTOR_HEAP_TYPE_DSV, 1, false);
-
-	D3D12_DEPTH_STENCIL_VIEW_DESC dsvDesc{};
-	dsvDesc.Format = DXGI_FORMAT_D24_UNORM_S8_UINT;
-	dsvDesc.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2D;
-	dsvDesc.Flags = D3D12_DSV_FLAG_NONE;
-	device->CreateDepthStencilView(depthStencilResource, &dsvDesc, dsvDescriptorHeap->GetCPUDescriptorHandleForHeapStart());
-	//
-	D3D12_DEPTH_STENCIL_DESC depthStencilDesc{};
-	depthStencilDesc.DepthEnable = true;
-	depthStencilDesc.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ALL;
-	depthStencilDesc.DepthFunc = D3D12_COMPARISON_FUNC_LESS;
-	depthStencilDesc.StencilEnable = false;
+	hr = dxgiFactory->CreateSwapChainForHwnd(commandQueue, hwnd, &swapChainDesc, nullptr, nullptr, reinterpret_cast<IDXGISwapChain1**>(&swapChain));
+	assert(SUCCEEDED(hr));
 
 	/*---------------PSO (Pipeline State Object)---------------*/
 //Root Signature
 	D3D12_ROOT_SIGNATURE_DESC descriptionRootSignature{};
 	descriptionRootSignature.Flags =
 		D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
+
+	D3D12_DESCRIPTOR_RANGE descriptorRange[1] = {};
+	descriptorRange[0].BaseShaderRegister = 0;
+	descriptorRange[0].NumDescriptors = 1;
+	descriptorRange[0].RegisterSpace = 0;
+	descriptorRange[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
+	descriptorRange[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
 
 	D3D12_ROOT_PARAMETER rootParameters[3] = {};
 	rootParameters[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
@@ -897,16 +874,11 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	rootParameters[1].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
 	rootParameters[1].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
 	rootParameters[1].Descriptor.ShaderRegister = 1;
-
-	D3D12_DESCRIPTOR_RANGE descriptorRange[1] = {};
-	descriptorRange[0].BaseShaderRegister = 0;
-	descriptorRange[0].NumDescriptors = 1;
-	descriptorRange[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
-	descriptorRange[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
 	rootParameters[2].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
 	rootParameters[2].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
 	rootParameters[2].DescriptorTable.pDescriptorRanges = descriptorRange;
-	rootParameters[2].DescriptorTable.NumDescriptorRanges = _countof(descriptorRange);
+	rootParameters[2].DescriptorTable.NumDescriptorRanges = 1; // _countof(descriptorRange);
+
 
 	D3D12_STATIC_SAMPLER_DESC staticSamplers[1] = {};
 	staticSamplers[0].Filter = D3D12_FILTER_MIN_MAG_MIP_LINEAR;
@@ -917,11 +889,11 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	staticSamplers[0].MaxLOD = D3D12_FLOAT32_MAX;
 	staticSamplers[0].ShaderRegister = 0;
 	staticSamplers[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+	descriptionRootSignature.pStaticSamplers = staticSamplers;
+	descriptionRootSignature.NumStaticSamplers = _countof(staticSamplers);
 
 	descriptionRootSignature.pParameters = rootParameters;
 	descriptionRootSignature.NumParameters = _countof(rootParameters);
-	descriptionRootSignature.pStaticSamplers = staticSamplers;
-	descriptionRootSignature.NumStaticSamplers = _countof(staticSamplers);
 
 	//WVP Resource (For use for one size)
 	ID3D12Resource* wvpResource = CreateBufferResource(device, sizeof(Matrix4x4));
@@ -950,14 +922,6 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		signatureBlob->GetBufferPointer(), signatureBlob->GetBufferSize(),
 		IID_PPV_ARGS(&rootSignature));
 	assert(SUCCEEDED(hr));
-
-	//Shader and Compile
-	IDxcBlob* vertexShaderBlob = CompileShader(L"Object3d.VS.hlsl", L"vs_6_0", dxcUtils, dxcCompiler, includeHandler);
-	assert(vertexShaderBlob != nullptr);
-
-	IDxcBlob* pixelShaderBlob = CompileShader(L"Object3d.PS.hlsl", L"ps_6_0", dxcUtils, dxcCompiler, includeHandler);
-	assert(pixelShaderBlob != nullptr);
-	assert(vertexShaderBlob && pixelShaderBlob);
 
 	//Input Layout
 	D3D12_INPUT_ELEMENT_DESC inputElementDescs[2] = {};
@@ -1003,6 +967,30 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	rasterizerDesc.AntialiasedLineEnable = FALSE;
 	rasterizerDesc.ForcedSampleCount = 0;
 	rasterizerDesc.ConservativeRaster = D3D12_CONSERVATIVE_RASTERIZATION_MODE_OFF;
+
+	//Shader and Compile
+	IDxcBlob* vertexShaderBlob = CompileShader(L"Object3d.VS.hlsl", L"vs_6_0", dxcUtils, dxcCompiler, includeHandler);
+	assert(vertexShaderBlob != nullptr);
+
+	IDxcBlob* pixelShaderBlob = CompileShader(L"Object3d.PS.hlsl", L"ps_6_0", dxcUtils, dxcCompiler, includeHandler);
+	assert(pixelShaderBlob != nullptr);
+	assert(vertexShaderBlob && pixelShaderBlob);
+
+	//Depth Stencil Buffer
+	ID3D12Resource* depthStencilResource = CreateDepthStencilTextureResource(device, kClientWidth, kClientHeight);
+	ID3D12DescriptorHeap* dsvDescriptorHeap = CreateDescriptorHeap(device, D3D12_DESCRIPTOR_HEAP_TYPE_DSV, 1, false);
+
+	D3D12_DEPTH_STENCIL_VIEW_DESC dsvDesc{};
+	dsvDesc.Format = DXGI_FORMAT_D24_UNORM_S8_UINT;
+	dsvDesc.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2D;
+	dsvDesc.Flags = D3D12_DSV_FLAG_NONE;
+	device->CreateDepthStencilView(depthStencilResource, &dsvDesc, dsvDescriptorHeap->GetCPUDescriptorHandleForHeapStart());
+	//
+	D3D12_DEPTH_STENCIL_DESC depthStencilDesc{};
+	depthStencilDesc.DepthEnable = true;
+	depthStencilDesc.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ALL;
+	depthStencilDesc.DepthFunc = D3D12_COMPARISON_FUNC_LESS_EQUAL;
+	//depthStencilDesc.StencilEnable = false;
 
 	/*------------PSO end--------------*/
 
@@ -1056,9 +1044,9 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	vertexResourceDesc.SampleDesc.Count = 1;
 	vertexResourceDesc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
 	ID3D12Resource* vertexResource = nullptr;
-	//hr = device->CreateCommittedResource(&uploadHeapProperties, D3D12_HEAP_FLAG_NONE, &vertexResourceDesc, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr,
-	//	IID_PPV_ARGS(&vertexResource));
-	//assert(SUCCEEDED(hr));
+	hr = device->CreateCommittedResource(&uploadHeapProperties, D3D12_HEAP_FLAG_NONE, &vertexResourceDesc, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr,
+		IID_PPV_ARGS(&vertexResource));
+	assert(SUCCEEDED(hr));
 
 	//VertexBufferView
 	vertexResource = CreateBufferResource(device, sizeof(VertexData) * 6);
@@ -1099,7 +1087,6 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	scissorRect.top = 0;
 	scissorRect.bottom = kClientHeight;
 
-
 	ID3D12DescriptorHeap* rtvDescriptorHeap = CreateDescriptorHeap(device, D3D12_DESCRIPTOR_HEAP_TYPE_RTV, 2, false);
 	ID3D12DescriptorHeap* srvDescriptorHeap = CreateDescriptorHeap(device, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 128, true);
 	
@@ -1129,48 +1116,44 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
 	srvDesc.Texture2D.MipLevels = UINT(metadata.mipLevels);
 
+	//Process screen Back Buffer to Front Buffer (Screen Swap)
+	UINT backBufferIndex = swapChain->GetCurrentBackBufferIndex();
+	D3D12_CPU_DESCRIPTOR_HANDLE dsvHandle = dsvDescriptorHeap->GetCPUDescriptorHandleForHeapStart();
+
 	D3D12_CPU_DESCRIPTOR_HANDLE textureSrvHandleCPU = srvDescriptorHeap->GetCPUDescriptorHandleForHeapStart();
 	D3D12_GPU_DESCRIPTOR_HANDLE textureSrvHandleGPU = srvDescriptorHeap->GetGPUDescriptorHandleForHeapStart();
 	textureSrvHandleCPU.ptr += device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
 	textureSrvHandleGPU.ptr += device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
 
-	device->CreateShaderResourceView(textureResource, &srvDesc, textureSrvHandleCPU);
-
-
-	//Process screen Back Buffer to Front Buffer (Screen Swap)
-	//UINT backBufferIndex = swapChain->GetCurrentBackBufferIndex();
-	D3D12_CPU_DESCRIPTOR_HANDLE dsvHandle = dsvDescriptorHeap->GetCPUDescriptorHandleForHeapStart();
-	//commandList->OMSetRenderTargets(1, &rtvHandles[backBufferIndex], false, &dsvHandle);
+	commandList->OMSetRenderTargets(1, &rtvHandles[backBufferIndex], false, &dsvHandle);
 	//
 	float clearColor[] = { 0.1f, 0.25f, 0.5f, 1.0f };
 	//
-	//commandList->ClearRenderTargetView(rtvHandles[backBufferIndex], clearColor, 0, nullptr);
-	//commandList->ClearDepthStencilView(dsvHandle, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
-	//
 	//
 	//Transition Barrier
-	//D3D12_RESOURCE_BARRIER barrier{};
-	//barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-	//barrier.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
-	//barrier.Transition.pResource = swapChainResources[backBufferIndex];
-	//barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_PRESENT;
-	//barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_RENDER_TARGET;
-	//commandList->ResourceBarrier(1, &barrier);
+	D3D12_RESOURCE_BARRIER barrier{};
+	barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+	barrier.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
+	barrier.Transition.pResource = swapChainResources[backBufferIndex];
+	barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_PRESENT;
+	barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_RENDER_TARGET;
+	commandList->ResourceBarrier(1, &barrier);
 	
-	//commandList->ClearRenderTargetView(rtvHandles[backBufferIndex], clearColor, 0, nullptr);
-	//commandList->ClearDepthStencilView(dsvDescriptorHeap->GetCPUDescriptorHandleForHeapStart(), D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
+	commandList->ClearRenderTargetView(rtvHandles[backBufferIndex], clearColor, 0, nullptr);
+	commandList->ClearDepthStencilView(dsvDescriptorHeap->GetCPUDescriptorHandleForHeapStart(), D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
 	
+	commandList->ClearDepthStencilView(dsvHandle, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
 	//Load commands
-	//commandList->RSSetViewports(1, &viewport);
-	//commandList->RSSetScissorRects(1, &scissorRect);
-	//commandList->SetGraphicsRootSignature(rootSignature);
-	//commandList->SetPipelineState(graphicsPipelineState);
-	//commandList->IASetVertexBuffers(0, 1, &vertexBufferView);
-	//commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-	//commandList->SetGraphicsRootConstantBufferView(1, materialResource->GetGPUVirtualAddress());
-	//commandList->SetGraphicsRootConstantBufferView(0, wvpResource->GetGPUVirtualAddress());
-	//
-	//commandList->DrawInstanced(6, 1, 0, 0);
+	commandList->RSSetViewports(1, &viewport);
+	commandList->RSSetScissorRects(1, &scissorRect);
+	commandList->SetGraphicsRootSignature(rootSignature);
+	commandList->SetPipelineState(graphicsPipelineState);
+	commandList->IASetVertexBuffers(0, 1, &vertexBufferView);
+	commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+	commandList->SetGraphicsRootConstantBufferView(1, materialResource->GetGPUVirtualAddress());
+	commandList->SetGraphicsRootConstantBufferView(0, wvpResource->GetGPUVirtualAddress());
+	
+	commandList->DrawInstanced(6, 1, 0, 0);
 	
 	////Fence (Before main loop)
 	ID3D12Fence* fence = nullptr;
@@ -1182,28 +1165,28 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	HANDLE fenceEvent = CreateEvent(NULL, FALSE, FALSE, NULL);
 	assert(fenceEvent != nullptr);
 	//
-	//barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_RENDER_TARGET;
-	//barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_PRESENT;
-	//commandList->ResourceBarrier(1, &barrier);
+	barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_RENDER_TARGET;
+	barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_PRESENT;
+	commandList->ResourceBarrier(1, &barrier);
 	
-	//hr = commandList->Close();
-	//assert(SUCCEEDED(hr));
+	hr = commandList->Close();
+	assert(SUCCEEDED(hr));
 	
 	//GPU
-	//ID3D12CommandList* commandLists[] = { commandList };
-	//commandQueue->ExecuteCommandLists(1, commandLists);
-	//swapChain->Present(1, 0);
+	ID3D12CommandList* commandLists[] = { commandList };
+	commandQueue->ExecuteCommandLists(1, commandLists);
+	swapChain->Present(1, 0);
 	
-	//fenceValue++;
-	//
-	//commandQueue->Signal(fence, fenceValue);
-	//
-	////Fence value for GPU
-	//if (fence->GetCompletedValue() < fenceValue) {
-	//	fence->SetEventOnCompletion(fenceValue, fenceEvent);
-	//
-	//	WaitForSingleObject(fenceEvent, INFINITE);
-	//}
+	fenceValue++;
+	
+	commandQueue->Signal(fence, fenceValue);
+	
+	//Fence value for GPU
+	if (fence->GetCompletedValue() < fenceValue) {
+		fence->SetEventOnCompletion(fenceValue, fenceEvent);
+	
+		WaitForSingleObject(fenceEvent, INFINITE);
+	}
 
 #ifdef USE_IMGUI
 	IMGUI_CHECKVERSION();
@@ -1220,9 +1203,14 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	io.Fonts->Build();
 #endif
 
-	hr = commandAllocator->Reset();
-	hr = commandList->Reset(commandAllocator, nullptr);
+	commandAllocator->Reset();
+	commandList->Reset(commandAllocator, nullptr);
 	assert(SUCCEEDED(hr));
+	
+	
+	ID3D12Resource* intermediateResource = UploadTextureData(textureResource, mipImages, device, commandList);
+
+	device->CreateShaderResourceView(textureResource, &srvDesc, textureSrvHandleCPU);
 
 	Log("Complete create D3D12Device!!!\n");
 
@@ -1261,6 +1249,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			assert(SUCCEEDED(hr));
 			hr = commandList->Reset(commandAllocator, nullptr);
 			assert(SUCCEEDED(hr));
+			
 
 			// Transition to Render Target
 			D3D12_RESOURCE_BARRIER barrier = {};
@@ -1271,15 +1260,17 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_RENDER_TARGET;
 			commandList->ResourceBarrier(1, &barrier);
 
-			//D3D12_CPU_DESCRIPTOR_HANDLE dsvHandle = dsvDescriptorHeap->GetCPUDescriptorHandleForHeapStart();
+
+			//set descriptor heap (required for ImGui)
+			ID3D12DescriptorHeap* descriptorHeaps[] = { srvDescriptorHeap };
+			commandList->SetDescriptorHeaps(_countof(descriptorHeaps), descriptorHeaps);
+
+			D3D12_CPU_DESCRIPTOR_HANDLE dsvHandle = srvDescriptorHeap->GetCPUDescriptorHandleForHeapStart();
+			commandList->OMSetRenderTargets(1, &rtvHandles[backBufferIndex], false, &dsvHandle);
+
 			commandList->ClearRenderTargetView(rtvHandles[backBufferIndex], clearColor, 0, nullptr);
 			commandList->ClearDepthStencilView(dsvHandle, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
 
-			commandList->OMSetRenderTargets(1, &rtvHandles[backBufferIndex], FALSE, &dsvHandle);
-			
-			//set descriptor heap (required for ImGui)
-			ID3D12DescriptorHeap* descriptorHeaps[] = { srvDescriptorHeap };
-			commandList->SetDescriptorHeaps(1, descriptorHeaps);
 
 			commandList->RSSetViewports(1, &viewport);
 			commandList->RSSetScissorRects(1, &scissorRect);
@@ -1291,7 +1282,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 			commandList->SetGraphicsRootConstantBufferView(0, wvpResource->GetGPUVirtualAddress());
 			commandList->SetGraphicsRootConstantBufferView(1, materialResource->GetGPUVirtualAddress());
-			commandList->SetGraphicsRootDescriptorTable(2, textureSrvHandleGPU);
+			commandList->SetGraphicsRootDescriptorTable(2, srvDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
 
 			commandList->DrawInstanced(6, 1, 0, 0);
 
@@ -1331,7 +1322,8 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	
 	//Close Handle / Close Window
 	CloseHandle(fenceEvent);
-	vertexResource->Release();           // vertices depend on nothing
+	fence->Release();
+	vertexResource->Release();
 	wvpResource->Release();
 	materialResource->Release();
 
@@ -1345,23 +1337,20 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	vertexShaderBlob->Release();
 
 	textureResource->Release();
-	intermediateResource->Release();     // upload buffer
+	intermediateResource->Release(); 
 
 	depthStencilResource->Release();
 	dsvDescriptorHeap->Release();
 
+	srvDescriptorHeap->Release();
+	rtvDescriptorHeap->Release();
 	swapChainResources[0]->Release();
 	swapChainResources[1]->Release();
 	swapChain->Release();
 
-	rtvDescriptorHeap->Release();
-	srvDescriptorHeap->Release();
-
 	commandList->Release();
 	commandAllocator->Release();
 	commandQueue->Release();
-
-	fence->Release();
 
 	device->Release();
 	useAdapter->Release();

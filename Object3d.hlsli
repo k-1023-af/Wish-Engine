@@ -7,7 +7,6 @@ struct VertexShaderOutput {
 
 struct PixelShaderOutput {
     float4 color : SV_TARGET;
-    float2 texcoord : TEXCOORD0;
 };
 
 //struct VertexShaderOutput
