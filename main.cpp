@@ -649,11 +649,6 @@ ID3D12DescriptorHeap* CreateDescriptorHeap(
 	HRESULT hr = device->CreateDescriptorHeap(&descriptorHeapDesc, IID_PPV_ARGS(&descriptorHeap));
 	assert(SUCCEEDED(hr));
 	return descriptorHeap;
-
-	/*ID3D12DescriptorHeap* dsvDescriptorHeap = CreateDescriptorHeap(device, D3D12_DESCRIPTOR_HEAP_TYPE_DSV, 1, false);
-	D3D12_DEPTH_STENCIL_VIEW_DESC dsvDesc{};
-	dsvDesc.Format = DXGI_FORMAT_D24_UNORM_S8_UINT;
-	dsvDesc.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2D;*/
 }
 
 [[nodiscard]]
@@ -946,18 +941,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 	//Blend State
 	D3D12_BLEND_DESC blendDesc{};
-	//blendDesc.AlphaToCoverageEnable = FALSE;
-	//blendDesc.IndependentBlendEnable = FALSE;
-	//
-	//blendDesc.RenderTarget[0].BlendEnable = FALSE;                
-	//blendDesc.RenderTarget[0].LogicOpEnable = FALSE;
-	//blendDesc.RenderTarget[0].SrcBlend = D3D12_BLEND_ONE;
-	//blendDesc.RenderTarget[0].DestBlend = D3D12_BLEND_ZERO;
-	//blendDesc.RenderTarget[0].BlendOp = D3D12_BLEND_OP_ADD;
-	//blendDesc.RenderTarget[0].SrcBlendAlpha = D3D12_BLEND_ONE;
-	//blendDesc.RenderTarget[0].DestBlendAlpha = D3D12_BLEND_ZERO;
-	//blendDesc.RenderTarget[0].BlendOpAlpha = D3D12_BLEND_OP_ADD;
-	//blendDesc.RenderTarget[0].LogicOp = D3D12_LOGIC_OP_NOOP;
+	//blendDesc.RenderTarget[0].BlendEnable = FALSE;
 	blendDesc.RenderTarget[0].RenderTargetWriteMask =
 		D3D12_COLOR_WRITE_ENABLE_ALL;
 
@@ -1006,13 +990,9 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 	graphicsPipelineStateDesc.VS = { vertexShaderBlob->GetBufferPointer(),
 	vertexShaderBlob->GetBufferSize() };
-	//graphicsPipelineStateDesc.VS.pShaderBytecode = vertexShaderBlob->GetBufferPointer();
-	//graphicsPipelineStateDesc.VS.BytecodeLength = vertexShaderBlob->GetBufferSize();
 
 	graphicsPipelineStateDesc.PS = { pixelShaderBlob->GetBufferPointer(),
 	pixelShaderBlob->GetBufferSize() };
-	//graphicsPipelineStateDesc.PS.pShaderBytecode = pixelShaderBlob->GetBufferPointer();
-	//graphicsPipelineStateDesc.PS.BytecodeLength = pixelShaderBlob->GetBufferSize();
 
 	graphicsPipelineStateDesc.BlendState = blendDesc;
 	graphicsPipelineStateDesc.RasterizerState = rasterizerDesc;
@@ -1141,9 +1121,8 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	commandList->ResourceBarrier(1, &barrier);
 	
 	commandList->ClearRenderTargetView(rtvHandles[backBufferIndex], clearColor, 0, nullptr);
-	commandList->ClearDepthStencilView(dsvDescriptorHeap->GetCPUDescriptorHandleForHeapStart(), D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
-	
 	commandList->ClearDepthStencilView(dsvHandle, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
+
 	//Load commands
 	commandList->RSSetViewports(1, &viewport);
 	commandList->RSSetScissorRects(1, &scissorRect);
@@ -1261,12 +1240,9 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_RENDER_TARGET;
 			commandList->ResourceBarrier(1, &barrier);
 
-
 			commandList->OMSetRenderTargets(1, &rtvHandles[backBufferIndex], false, &dsvHandle);
-
 			commandList->ClearRenderTargetView(rtvHandles[backBufferIndex], clearColor, 0, nullptr);
 			commandList->ClearDepthStencilView(dsvHandle, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
-
 
 			commandList->RSSetViewports(1, &viewport);
 			commandList->RSSetScissorRects(1, &scissorRect);
@@ -1277,8 +1253,6 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			//set descriptor heap (required for ImGui)
 			ID3D12DescriptorHeap* descriptorHeaps[] = { srvDescriptorHeap };
 			commandList->SetDescriptorHeaps(_countof(descriptorHeaps), descriptorHeaps);
-
-			D3D12_CPU_DESCRIPTOR_HANDLE dsvHandle = srvDescriptorHeap->GetCPUDescriptorHandleForHeapStart();
 
 			commandList->SetGraphicsRootConstantBufferView(0, wvpResource->GetGPUVirtualAddress());
 			commandList->SetGraphicsRootConstantBufferView(1, materialResource->GetGPUVirtualAddress());
@@ -1364,8 +1338,6 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 	CoUninitialize();
 	CloseWindow(hwnd);
-
-	
 
 #ifdef _DEBUG
 	IDXGIDebug1* debug;
