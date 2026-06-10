@@ -327,7 +327,7 @@ Transform transform = {
 Transform cameraTransform = {
 	{ 1.0f, 1.0f, 1.0f }, // scale
 	{ 0.0f, 0.0f, 0.0f }, // rotate
-	{ 0.0f, 0.0f, 5.0f } // translate (move camera back along z-axis)
+	{ 0.0f, 0.0f, -5.0f } // translate (move camera back along z-axis)
 };
 
 // Forward declarations to fix C3861: 'ConvertString' identifier not found
@@ -555,6 +555,7 @@ ID3D12Resource* CreateBufferResource(ID3D12Device* device, size_t sizeInBytes)
 		nullptr,
 		IID_PPV_ARGS(&resource)
 	);
+	resource->SetName(L"BufferResource");
 
 	assert(SUCCEEDED(hr));
 	if (FAILED(hr)) {
@@ -598,6 +599,7 @@ ID3D12Resource* CreateTextureResource(ID3D12Device* device, const DirectX::TexMe
 		Log("Failed to create buffer resource!\n");
 		return nullptr;
 	}
+	resource->SetName(L"TextureResource");
 
 	return resource;
 };
@@ -657,6 +659,7 @@ ID3D12Resource* UploadTextureData(ID3D12Resource* texture, const DirectX::Scratc
 	DirectX::PrepareUpload(device, mipImages.GetImages(), mipImages.GetImageCount(), mipImages.GetMetadata(), subresources);
 	uint64_t intermediateSize = GetRequiredIntermediateSize(texture, 0, UINT(subresources.size()));
 	ID3D12Resource* intermediateResource = CreateBufferResource(device, intermediateSize);
+	intermediateResource->SetName(L"intermediateResource");
 	UpdateSubresources(commandList, texture, intermediateResource, 0, 0, UINT(subresources.size()), subresources.data());
 
 	D3D12_RESOURCE_BARRIER barrier = {};
@@ -899,15 +902,17 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 	//WVP Resource (For use for one size)
 	ID3D12Resource* wvpResource = CreateBufferResource(device, sizeof(Matrix4x4));
+	wvpResource->SetName(L"wvpResource");
 	Matrix4x4* wvpData = nullptr;
 	wvpResource->Map(0, nullptr, reinterpret_cast<void**>(&wvpData));
 	MakeIdentity4x4(*wvpData);	//Identity matrix for WVP (World-View-Projection)
 
 	//Material Resource (For simplicity, using a single color as material data. In a real application, this would likely be more complex and involve textures, multiple parameters, etc.)
 	ID3D12Resource* materialResource = CreateBufferResource(device, sizeof(Material));
+	materialResource->SetName(L"materialResource");
 	Material* materialData = nullptr;
 	materialResource->Map(0, nullptr, reinterpret_cast<void**>(&materialData));
-	materialData->color = { 1.0f, 0.0f, 0.0f, 1.0f }; //-----------Color of the Triangle-----------//
+	materialData->color = { 1.0f, 1.0f, 1.0f, 1.0f }; //-----------Color of the Triangle-----------//
 
 	//Serialize and make into binary
 	ID3DBlob* signatureBlob = nullptr;
@@ -1029,8 +1034,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	vertexResourceDesc.SampleDesc.Count = 1;
 	vertexResourceDesc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
 	ID3D12Resource* vertexResource = CreateBufferResource(device, sizeof(VertexData) * 6);
-	hr = device->CreateCommittedResource(&uploadHeapProperties, D3D12_HEAP_FLAG_NONE, &vertexResourceDesc, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr,
-		IID_PPV_ARGS(&vertexResource));
+	vertexResource->SetName(L"vertexResource");
 	assert(SUCCEEDED(hr));
 
 	//VertexBufferView
@@ -1106,34 +1110,34 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	textureSrvHandleCPU.ptr += device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
 	textureSrvHandleGPU.ptr += device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
 
-	commandList->OMSetRenderTargets(1, &rtvHandles[backBufferIndex], false, &dsvHandle);
+	//commandList->OMSetRenderTargets(1, &rtvHandles[backBufferIndex], false, &dsvHandle);
 	//
 	float clearColor[] = { 0.1f, 0.25f, 0.5f, 1.0f };
 	//
 	//
-	//Transition Barrier
-	D3D12_RESOURCE_BARRIER barrier{};
-	barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-	barrier.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
-	barrier.Transition.pResource = swapChainResources[backBufferIndex];
-	barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_PRESENT;
-	barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_RENDER_TARGET;
-	commandList->ResourceBarrier(1, &barrier);
-	
-	commandList->ClearRenderTargetView(rtvHandles[backBufferIndex], clearColor, 0, nullptr);
-	commandList->ClearDepthStencilView(dsvHandle, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
+	////Transition Barrier
+	//D3D12_RESOURCE_BARRIER barrier{};
+	//barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+	//barrier.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
+	//barrier.Transition.pResource = swapChainResources[backBufferIndex];
+	//barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_PRESENT;
+	//barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_RENDER_TARGET;
+	//commandList->ResourceBarrier(1, &barrier);
+	//
+	//commandList->ClearRenderTargetView(rtvHandles[backBufferIndex], clearColor, 0, nullptr);
+	//commandList->ClearDepthStencilView(dsvHandle, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
 
-	//Load commands
-	commandList->RSSetViewports(1, &viewport);
-	commandList->RSSetScissorRects(1, &scissorRect);
-	commandList->SetGraphicsRootSignature(rootSignature);
-	commandList->SetPipelineState(graphicsPipelineState);
-	commandList->IASetVertexBuffers(0, 1, &vertexBufferView);
-	commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-	commandList->SetGraphicsRootConstantBufferView(1, materialResource->GetGPUVirtualAddress());
-	commandList->SetGraphicsRootConstantBufferView(0, wvpResource->GetGPUVirtualAddress());
-	
-	commandList->DrawInstanced(6, 1, 0, 0);
+	////Load commands
+	//commandList->RSSetViewports(1, &viewport);
+	//commandList->RSSetScissorRects(1, &scissorRect);
+	//commandList->SetGraphicsRootSignature(rootSignature);
+	//commandList->SetPipelineState(graphicsPipelineState);
+	//commandList->IASetVertexBuffers(0, 1, &vertexBufferView);
+	//commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+	//commandList->SetGraphicsRootConstantBufferView(1, materialResource->GetGPUVirtualAddress());
+	//commandList->SetGraphicsRootConstantBufferView(0, wvpResource->GetGPUVirtualAddress());
+	//
+	//commandList->DrawInstanced(6, 1, 0, 0);
 	
 	////Fence (Before main loop)
 	ID3D12Fence* fence = nullptr;
@@ -1145,9 +1149,12 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	HANDLE fenceEvent = CreateEvent(NULL, FALSE, FALSE, NULL);
 	assert(fenceEvent != nullptr);
 	//
-	barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_RENDER_TARGET;
+	/*barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_RENDER_TARGET;
 	barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_PRESENT;
-	commandList->ResourceBarrier(1, &barrier);
+	commandList->ResourceBarrier(1, &barrier);*/
+
+
+	ID3D12Resource* intermediateResource = UploadTextureData(textureResource, mipImages, device, commandList);
 	
 	hr = commandList->Close();
 	assert(SUCCEEDED(hr));
@@ -1188,7 +1195,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	assert(SUCCEEDED(hr));
 	
 	
-	ID3D12Resource* intermediateResource = UploadTextureData(textureResource, mipImages, device, commandList);
+	
 
 	device->CreateShaderResourceView(textureResource, &srvDesc, textureSrvHandleCPU);
 
@@ -1210,11 +1217,13 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			// === Update ===
 			transform.rotate.y += 0.03f;           // or better: use delta time
 			Matrix4x4 worldMatrix = MakeAffineMatrix(transform.scale, transform.rotate, transform.translate);
+			//worldMatrix = MakeIdentity4x4(worldMatrix);
 			
 			Matrix4x4 cameraMatrix = MakeAffineMatrix(cameraTransform.scale, cameraTransform.rotate, cameraTransform.translate);
 			Matrix4x4 viewMatrix = Inverse(cameraMatrix);
 			Matrix4x4 projectionMatrix = MakePerspectiveFovMatrix(0.45f, float(kClientWidth) / float(kClientHeight), 0.1f, 100.0f);
 			Matrix4x4 worldViewProjectionMatrix = Multiply(worldMatrix, Multiply(viewMatrix, projectionMatrix));
+			//Matrix4x4 worldViewProjectionMatrix = Multiply(viewMatrix, projectionMatrix);
 			*wvpData = worldViewProjectionMatrix;
 #ifdef USE_IMGUI
 			ImGui::ShowDemoWindow();
@@ -1224,11 +1233,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			// === Render ===
 			UINT backBufferIndex = swapChain->GetCurrentBackBufferIndex();
 
-			// Reset command list
-			HRESULT hr = commandAllocator->Reset();
-			assert(SUCCEEDED(hr));
-			hr = commandList->Reset(commandAllocator, nullptr);
-			assert(SUCCEEDED(hr));
+			
 			
 
 			// Transition to Render Target
@@ -1256,7 +1261,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 			commandList->SetGraphicsRootConstantBufferView(0, wvpResource->GetGPUVirtualAddress());
 			commandList->SetGraphicsRootConstantBufferView(1, materialResource->GetGPUVirtualAddress());
-			commandList->SetGraphicsRootDescriptorTable(2, srvDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
+			commandList->SetGraphicsRootDescriptorTable(2, textureSrvHandleGPU);
 
 			commandList->IASetVertexBuffers(0, 1, &vertexBufferView);
 			commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
@@ -1287,6 +1292,12 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 				fence->SetEventOnCompletion(fenceValue, fenceEvent);
 				WaitForSingleObject(fenceEvent, INFINITE);
 			}
+
+			// Reset command list
+			HRESULT hr = commandAllocator->Reset();
+			assert(SUCCEEDED(hr));
+			hr = commandList->Reset(commandAllocator, nullptr);
+			assert(SUCCEEDED(hr));
 		}
 	}
 
