@@ -806,9 +806,9 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 #ifdef _DEBUG
 	ID3D12InfoQueue* infoQueue = nullptr;
 	if (SUCCEEDED(device->QueryInterface(IID_PPV_ARGS(&infoQueue)))) {
-		infoQueue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_CORRUPTION, true);
-		infoQueue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_ERROR, true);
-		infoQueue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_WARNING, true);
+		//infoQueue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_CORRUPTION, true);
+		//infoQueue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_ERROR, true);
+		//infoQueue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_WARNING, true);
 		D3D12_MESSAGE_ID denyIds[] = {
 			D3D12_MESSAGE_ID_RESOURCE_BARRIER_MISMATCHING_COMMAND_LIST_TYPE
 		};
@@ -1053,11 +1053,12 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	vertexResourceDesc.MipLevels = 1;
 	vertexResourceDesc.SampleDesc.Count = 1;
 	vertexResourceDesc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+
+	//VertexBufferView
 	ID3D12Resource* vertexResource = CreateBufferResource(device, sizeof(VertexData) * 6);
 	vertexResource->SetName(L"vertexResource");
 	assert(SUCCEEDED(hr));
 
-	//VertexBufferView
 	D3D12_VERTEX_BUFFER_VIEW vertexBufferView{};
 	vertexBufferView.BufferLocation = vertexResource->GetGPUVirtualAddress();
 	vertexBufferView.SizeInBytes = sizeof(VertexData) * 6;
@@ -1098,6 +1099,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 	ID3D12Resource* vertexResourceSprite = CreateBufferResource(device, sizeof(VertexData) * 6);
 	vertexResourceSprite->SetName(L"vertexResourceSprite");
+
 	D3D12_VERTEX_BUFFER_VIEW vertexBufferViewSprite{};
 	vertexBufferViewSprite.BufferLocation = vertexResourceSprite->GetGPUVirtualAddress();
 	vertexBufferViewSprite.SizeInBytes = sizeof(VertexData) * 6;
@@ -1109,7 +1111,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	vertexDataSprite[0].texcoord = { 0.0f, 1.0f };
 	vertexDataSprite[1].position = { 0.0f, 0.0f, 0.0f, 1.0f };
 	vertexDataSprite[1].texcoord = { 0.0f, 0.0f };
-	vertexDataSprite[2].position = { 0.0f, 360.0f, 0.0f, 1.0f };
+	vertexDataSprite[2].position = { 640.0f, 360.0f, 0.0f, 1.0f };
 	vertexDataSprite[2].texcoord = { 1.0f, 1.0f };
 	
 	vertexDataSprite[3].position = { 0.0f, 0.0f, 0.0f, 1.0f };
@@ -1119,13 +1121,15 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	vertexDataSprite[5].position = { 640.0f, 360.0f, 0.0f, 1.0f };
 	vertexDataSprite[5].texcoord = { 1.0f, 1.0f };
 
-
 	////transform 
 	ID3D12Resource* transformationMatrixResourceSprite = CreateBufferResource(device, sizeof(Matrix4x4));
 	transformationMatrixResourceSprite->SetName(L"transformationMatrixResourceSprite");
 	Matrix4x4* transformationMatrixDataSprite = nullptr;
 	transformationMatrixResourceSprite->Map(0, nullptr, reinterpret_cast<void**>(&transformationMatrixDataSprite));
 	*transformationMatrixDataSprite = MakeIdentity4x4(*transformationMatrixDataSprite);
+
+	////move to CPU --------------------------------
+	Transform transformSprite{ { 1.0f, 1.0f, 1.0f}, { 0.0f, 0.0f, 0.0f }, {0.0f, 0.0f, 0.0f} };
 
 
 	//Pull Resources from Swap Chain (create rtv)
@@ -1177,8 +1181,6 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	//
 
 	ID3D12Resource* intermediateResource = UploadTextureData(textureResource, mipImages, device, commandList);
-	////move to CPU --------------------------------
-	Transform transformSprite{ { 1.0f, 1.0f, 1.0f}, { 0.0f, 0.0f, 0.0f }, {0.0f, 0.0f, 0.0f} };
 
 	hr = commandList->Close();
 	assert(SUCCEEDED(hr));
@@ -1219,8 +1221,6 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	assert(SUCCEEDED(hr));
 	
 	
-	
-
 	device->CreateShaderResourceView(textureResource, &srvDesc, textureSrvHandleCPU);
 
 	Log("Complete create D3D12Device!!!\n");
@@ -1256,15 +1256,68 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			*wvpData = worldViewProjectionMatrix;
 			
 #ifdef USE_IMGUI
-			ImGui::ShowDemoWindow();
+			//ImGui::ShowDemoWindow();
+
+			ImGui::Begin("Sprite Editor");
+
+			// === Color Control ===
+			ImGui::Text("Color RGB (Shared)");
+			if (ImGui::ColorEdit3("Triangle Color", &materialData->color.x)) {
+			}
+
+			ImGui::Separator();
+
+			// Scale
+			ImGui::DragFloat3("Scale", &transformSprite.scale.x, 0.01f, 0.1f, 10.0f);
+
+			// Rotation
+			if (ImGui::DragFloat3("Rotation", &transformSprite.rotate.x, 0.03f, -10.0f, 10.0f)) {
+			}
+
+			// Translation
+			ImGui::DragFloat3("Position", &transformSprite.translate.x, 1.0f, 0.0f, 640.0f);
+
+			// Reset button
+			if (ImGui::Button("Reset Transform")) {
+				transformSprite.scale = { 1.0f, 1.0f, 1.0f };
+				transformSprite.rotate = { 0.0f, 0.0f, 0.0f };
+				transformSprite.translate = { 0.0f, 0.0f, 0.0f };
+			}
+
+			ImGui::End();
+
+			ImGui::Begin("Triangle Editor");
+
+			// === Color Control ===
+			ImGui::Text("Color RGB (Shared)");
+			if (ImGui::ColorEdit3("Triangle Color", &materialData->color.x)) {
+			}
+
+			ImGui::Separator();
+
+			// Scale
+			ImGui::DragFloat3("Scale", &transform.scale.x, 0.01f, 0.1f, 10.0f);
+
+			// Rotation
+			if (ImGui::DragFloat3("Rotation", &transform.rotate.x, 0.03f, -10.0f, 10.0f)) {
+			}
+
+			// Translation
+			ImGui::DragFloat3("Position", &transform.translate.x, 0.01f, -5.0f, 5.0f);
+
+			// Reset button
+			if (ImGui::Button("Reset Transform")) {
+				transform.scale = { 1.0f, 1.0f, 1.0f };
+				transform.rotate = { 0.0f, 0.0f, 0.0f };
+				transform.translate = { 0.0f, 0.0f, 0.0f };
+			}
+
+			ImGui::End();
 
 			ImGui::Render();
 #endif
 			// === Render ===
 			UINT backBufferIndex = swapChain->GetCurrentBackBufferIndex();
-
-			
-			
 
 			// Transition to Render Target
 			D3D12_RESOURCE_BARRIER barrier = {};
@@ -1289,17 +1342,21 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			ID3D12DescriptorHeap* descriptorHeaps[] = { srvDescriptorHeap };
 			commandList->SetDescriptorHeaps(_countof(descriptorHeaps), descriptorHeaps);
 
-			commandList->SetGraphicsRootConstantBufferView(0, wvpResource->GetGPUVirtualAddress());
+			// Material and Texture are shared
 			commandList->SetGraphicsRootConstantBufferView(1, materialResource->GetGPUVirtualAddress());
 			commandList->SetGraphicsRootDescriptorTable(2, textureSrvHandleGPU);
 
-
-			//commandList->SetGraphicsRootConstantBufferView(1, transformationMatrixResourceSprite->GetGPUVirtualAddress());
-
+			// 1. Draw 3D Triangle(s) - Perspective
+			commandList->SetGraphicsRootConstantBufferView(0, wvpResource->GetGPUVirtualAddress());
 			commandList->IASetVertexBuffers(0, 1, &vertexBufferView);
-			//commandList ->IASetVertexBuffers(0, 1, &vertexBufferViewSprite);
 			commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-			commandList->DrawInstanced(6, 1, 0, 0);
+			commandList->DrawInstanced(6, 1, 0, 0);  
+
+			// 2. Draw Sprite - Orthographic (2D overlay)
+			commandList->SetGraphicsRootConstantBufferView(0, transformationMatrixResourceSprite->GetGPUVirtualAddress());
+			commandList->IASetVertexBuffers(0, 1, &vertexBufferViewSprite);
+			commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+			commandList->DrawInstanced(6, 1, 0, 0);  
 
 		#ifdef USE_IMGUI
 			ImGui_ImplDX12_RenderDrawData(ImGui::GetDrawData(), commandList);
