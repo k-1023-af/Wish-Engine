@@ -52,7 +52,8 @@ struct Matrix4x4 {
 	float m[4][4];
 };
 
-struct Transform {
+
+struct WorldTransform {
 	Vector3 scale;
 	Vector3 rotate;
 	Vector3 translate;
@@ -61,11 +62,18 @@ struct Transform {
 struct VertexData {
 	Vector4 position;
 	Vector2 texcoord;
+	float radius;
 };
 
 struct Material {
 	Vector4 color;
 };
+
+struct SphereMesh {
+	std::vector<VertexData> vertices;
+};
+
+float pi = 3.14f;
 
 Matrix4x4 MakeIdentity4x4(Matrix4x4& matrix) {
 	for (int i = 0; i < 4; ++i) {
@@ -339,17 +347,33 @@ Matrix4x4 Inverse(Matrix4x4 m) {
 	return inverse;
 }
 
-Transform transform = {
+Vector4 Transform(const Vector4& v, const Matrix4x4& m) {
+	Vector4 result;
+	result.x = v.x * m.m[0][0] + v.y * m.m[1][0] + v.z * m.m[2][0] + 1.0f * m.m[3][0];
+	result.y = v.x * m.m[0][1] + v.y * m.m[1][1] + v.z * m.m[2][1] + 1.0f * m.m[3][1];
+	result.z = v.x * m.m[0][2] + v.y * m.m[1][2] + v.z * m.m[2][2] + 1.0f * m.m[3][2];
+
+	result.w = v.x * m.m[0][3] + v.y * m.m[1][3] + v.z * m.m[2][3] + 1.0f * m.m[3][3];
+	//assert(w != 0.0f);
+	result.x /= result.w;
+	result.y /= result.w;
+	result.z /= result.w;
+
+	return result;
+}
+
+WorldTransform transform = {
 	{ 1.0f, 1.0f, 1.0f }, // scale
 	{ 0.0f, 0.0f, 0.0f }, // rotate
 	{ 0.0f, 0.0f, 0.0f }  // translate
 };
 
-Transform cameraTransform = {
+WorldTransform cameraTransform = {
 	{ 1.0f, 1.0f, 1.0f }, // scale
 	{ 0.0f, 0.0f, 0.0f }, // rotate
 	{ 0.0f, 0.0f, -5.0f } // translate (move camera back along z-axis)
 };
+
 
 // Forward declarations to fix C3861: 'ConvertString' identifier not found
 std::wstring ConvertString(const std::string& str);
@@ -417,25 +441,6 @@ std::string ConvertString(const std::wstring& str) {
 	WideCharToMultiByte(CP_UTF8, 0, str.data(), static_cast<int>(str.size()), result.data(), sizeNeeded, NULL, NULL);
 	return result;
 }
-
-///// <ConvertString.cpp> end	//////
-
-//bool DepthFunc(float currz, float prevz) {
-//	return currz <= prevz;
-//}
-
-//if (DepthFunc(currZ, prevZ)) {
-//	//draw
-//}
-//else {
-//	// dont draw
-//}
-
-//bool DepthFunc(float currz, float prevz) {
-//	return currz >= prevz;
-//}
-
-
 
 
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
@@ -583,7 +588,6 @@ ID3D12Resource* CreateBufferResource(ID3D12Device* device, size_t sizeInBytes)
 		Log("Failed to create buffer resource!\n");
 		return nullptr;
 	}
-
 	return resource;
 }
 
@@ -693,6 +697,70 @@ ID3D12Resource* UploadTextureData(ID3D12Resource* texture, const DirectX::Scratc
 	commandList->ResourceBarrier(1, &barrier);
 	return intermediateResource;
 }
+
+SphereMesh DrawSphere(const uint32_t subdivision, float radius) {
+	SphereMesh mesh;
+
+	const uint32_t kSubdivision = subdivision;  ////
+	const float kLatEvery = pi / float(kSubdivision); /////
+	const float kLonEvery = (2.0f * pi) / float(kSubdivision); /////
+
+	mesh.vertices.reserve(kSubdivision * kSubdivision * 6);
+
+	for (uint32_t latIndex = 0; latIndex < kSubdivision; ++latIndex) {
+		float lat = -pi / 2.0f + kLatEvery * latIndex;
+		float latNext = lat + kLatEvery;
+
+		for (uint32_t lonIndex = 0; lonIndex < kSubdivision; ++lonIndex) {
+			uint32_t startIndex = (latIndex * kSubdivision + lonIndex) * 6;
+
+			float lon = lonIndex * kLonEvery;
+			float lonNext = lon + kLonEvery;
+
+			float u = (float)lonIndex / (float)kSubdivision;
+			float v = 1.0f - (float)latIndex / (float)kSubdivision;
+			float vNext = 1.0f - (float)(latIndex + 1) / (float)kSubdivision;
+			float uNext = (float)(lonIndex + 1) / (float)kSubdivision;
+
+			VertexData vertexData[sizeof(VertexData)] = {}; //a,b,c, c,b,d
+			vertexData[0].position.x = radius * cos(lat) * cosf(lon);
+			vertexData[0].position.y = radius * sin(lat);
+			vertexData[0].position.z = radius * cos(lat) * sin(lon);
+			vertexData[0].position.w = 1.0f;
+			vertexData[0].texcoord = { u, v }; //a
+			
+			vertexData[1].position.x = radius * cos(latNext) * cosf(lon);
+			vertexData[1].position.y = radius * sin(latNext);
+			vertexData[1].position.z = radius * cos(latNext) * sin(lon);
+			vertexData[1].position.w = 1.0f;
+			vertexData[1].texcoord = { u, vNext };  //b
+			
+			vertexData[2].position.x = radius * cos(lat) * cosf(lonNext);
+			vertexData[2].position.y = radius * sin(lat);
+			vertexData[2].position.z = radius * cos(lat) * sin(lonNext);
+			vertexData[2].position.w = 1.0f;
+			vertexData[2].texcoord = { uNext, v }; //c
+
+			vertexData[3].position = vertexData[2].position;
+			vertexData[3].texcoord = vertexData[2].texcoord;
+
+			vertexData[4].position = vertexData[1].position;
+			vertexData[4].texcoord = vertexData[1].texcoord;
+
+			vertexData[5].position.x = radius * cos(latNext) * cosf(lonNext);
+			vertexData[5].position.y = radius * sin(latNext);
+			vertexData[5].position.z = radius * cos(latNext) * sin(lonNext);
+			vertexData[5].position.w = 1.0f;
+			vertexData[5].texcoord = { uNext, vNext}; //d
+
+			for (int i = 0; i < 6; ++i) {
+				mesh.vertices.push_back(vertexData[i]);
+			}
+		}
+	}
+	return mesh;
+}
+
 
 DirectX::ScratchImage LoadTexture(const std::string& filePath) {
 	DirectX::ScratchImage image{};
@@ -1129,7 +1197,41 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	*transformationMatrixDataSprite = MakeIdentity4x4(*transformationMatrixDataSprite);
 
 	////move to CPU --------------------------------
-	Transform transformSprite{ { 1.0f, 1.0f, 1.0f}, { 0.0f, 0.0f, 0.0f }, {0.0f, 0.0f, 0.0f} };
+	WorldTransform transformSprite{ { 1.0f, 1.0f, 1.0f}, { 0.0f, 0.0f, 0.0f }, {0.0f, 0.0f, 0.0f} };
+
+	//------------------cube
+
+	WorldTransform transformSphere{ { 1.0f, 1.0f, 1.0f}, { 0.0f, 0.0f, 0.0f }, {0.0f, 0.0f, 1.0f} };
+
+	SphereMesh sphere = DrawSphere(16, 1);
+
+	// Create dedicated vertex buffer for sphere
+	ID3D12Resource* sphereVertexResource = CreateBufferResource(
+		device, sizeof(VertexData) * sphere.vertices.size()
+	);
+	sphereVertexResource->SetName(L"sphereVertexResource");
+
+	D3D12_VERTEX_BUFFER_VIEW sphereVertexBufferView{};
+	sphereVertexBufferView.BufferLocation = sphereVertexResource->GetGPUVirtualAddress();
+	sphereVertexBufferView.SizeInBytes = sizeof(VertexData) * (UINT)sphere.vertices.size();
+	sphereVertexBufferView.StrideInBytes = sizeof(VertexData);
+
+	// Upload sphere vertex data
+	VertexData* sphereVertexData = nullptr;
+	sphereVertexResource->Map(0, nullptr, reinterpret_cast<void**>(&sphereVertexData));
+	std::memcpy(sphereVertexData, sphere.vertices.data(), sizeof(VertexData) * sphere.vertices.size());
+	sphereVertexResource->Unmap(0, nullptr);
+
+	// Create dedicated WVP constant buffer for sphere
+	ID3D12Resource* sphereWVPResource = CreateBufferResource(device, sizeof(Matrix4x4));
+	sphereWVPResource->SetName(L"sphereWVPResource");
+
+	Matrix4x4* sphereWVPData = nullptr;
+	sphereWVPResource->Map(0, nullptr, reinterpret_cast<void**>(&sphereWVPData));
+	MakeIdentity4x4(*sphereWVPData);
+
+
+	//--------------------cube
 
 
 	//Pull Resources from Swap Chain (create rtv)
@@ -1239,7 +1341,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			#endif
 
 			// === Update ===
-			transform.rotate.y += 0.03f;           // or better: use delta time
+			transform.rotate.y += 0.03f;  
 			Matrix4x4 worldMatrix = MakeAffineMatrix(transform.scale, transform.rotate, transform.translate);
 			Matrix4x4 viewMatrixSprite = MakeIdentity4x4(viewMatrixSprite);
 
@@ -1248,70 +1350,83 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			Matrix4x4 projectionMatrixSprite = MakeOrthographicMatrix(0.0f, 0.0f, float(kClientWidth), float(kClientHeight), 0.0f, 100.0f);
 			Matrix4x4 worldViewProjectionMatrixSprite = Multiply(worldMatrixSprite, Multiply(viewMatrixSprite, projectionMatrixSprite));
 			*transformationMatrixDataSprite = worldViewProjectionMatrixSprite;
-			//
+
+			//camera
 			Matrix4x4 cameraMatrix = MakeAffineMatrix(cameraTransform.scale, cameraTransform.rotate, cameraTransform.translate);
 			Matrix4x4 viewMatrix = Inverse(cameraMatrix);
 			Matrix4x4 projectionMatrix = MakePerspectiveFovMatrix(0.45f, float(kClientWidth) / float(kClientHeight), 0.1f, 100.0f);
 			Matrix4x4 worldViewProjectionMatrix = Multiply(worldMatrix, Multiply(viewMatrix, projectionMatrix));
 			*wvpData = worldViewProjectionMatrix;
+
+			//DrawSphere
+			transformSphere.rotate.y += 0.02f;
+			Matrix4x4 worldSphereMatrix = MakeAffineMatrix(transformSphere.scale, transformSphere.rotate, transformSphere.translate);
+			//Matrix4x4 sphereInverseMatrix = Inverse(worldSphereMatrix);
+			Matrix4x4 sphereProjectionMatrix = MakePerspectiveFovMatrix(0.45f, float(kClientWidth) / float(kClientHeight), 0.1f, 100.0f);
+			Matrix4x4 sphereViewProjectionMatrix = Multiply(worldSphereMatrix, Multiply(worldSphereMatrix, sphereProjectionMatrix));
+			
+			Matrix4x4 sphereWVP = Multiply(worldSphereMatrix, Multiply(viewMatrix, projectionMatrix));
+			*sphereWVPData = sphereWVP;
 			
 #ifdef USE_IMGUI
 			//ImGui::ShowDemoWindow();
 
 			ImGui::Begin("Sprite Editor");
-
-			// === Color Control ===
 			ImGui::Text("Color RGB (Shared)");
 			if (ImGui::ColorEdit3("Triangle Color", &materialData->color.x)) {
 			}
-
 			ImGui::Separator();
-
 			// Scale
 			ImGui::DragFloat3("Scale", &transformSprite.scale.x, 0.01f, 0.1f, 10.0f);
-
 			// Rotation
 			if (ImGui::DragFloat3("Rotation", &transformSprite.rotate.x, 0.03f, -10.0f, 10.0f)) {
 			}
-
 			// Translation
 			ImGui::DragFloat3("Position", &transformSprite.translate.x, 1.0f, 0.0f, 640.0f);
-
 			// Reset button
 			if (ImGui::Button("Reset Transform")) {
 				transformSprite.scale = { 1.0f, 1.0f, 1.0f };
 				transformSprite.rotate = { 0.0f, 0.0f, 0.0f };
 				transformSprite.translate = { 0.0f, 0.0f, 0.0f };
 			}
-
 			ImGui::End();
 
-			ImGui::Begin("Triangle Editor");
+			//ImGui::Begin("Triangle Editor");
+			//ImGui::Text("Color RGB (Shared)");
+			//if (ImGui::ColorEdit3("Triangle Color", &materialData->color.x)) {
+			//}
+			//ImGui::Separator();
+			//// Scale
+			//ImGui::DragFloat3("Scale", &transform.scale.x, 0.01f, 0.1f, 10.0f);
+			//// Rotation
+			//if (ImGui::DragFloat3("Rotation", &transform.rotate.x, 0.03f, -10.0f, 10.0f)) {
+			//}
+			//// Translation
+			//ImGui::DragFloat3("Position", &transform.translate.x, 0.01f, -5.0f, 5.0f);
+			//// Reset button
+			//if (ImGui::Button("Reset Transform")) {
+			//	transform.scale = { 1.0f, 1.0f, 1.0f };
+			//	transform.rotate = { 0.0f, 0.0f, 0.0f };
+			//	transform.translate = { 0.0f, 0.0f, 0.0f };
+			//}
+			//ImGui::End();
 
-			// === Color Control ===
+			ImGui::Begin("Sphere Editor");
 			ImGui::Text("Color RGB (Shared)");
-			if (ImGui::ColorEdit3("Triangle Color", &materialData->color.x)) {
-			}
-
+			if (ImGui::ColorEdit3("Sphere Color", &materialData->color.x)) {}
 			ImGui::Separator();
-
 			// Scale
-			ImGui::DragFloat3("Scale", &transform.scale.x, 0.01f, 0.1f, 10.0f);
-
+			ImGui::DragFloat3("Scale", &transformSphere.scale.x, 0.01f, 0.1f, 10.0f);
 			// Rotation
-			if (ImGui::DragFloat3("Rotation", &transform.rotate.x, 0.03f, -10.0f, 10.0f)) {
-			}
-
+			ImGui::DragFloat3("Rotation", &transformSphere.rotate.x, 0.03f, -10.0f, 10.0f);
 			// Translation
-			ImGui::DragFloat3("Position", &transform.translate.x, 0.01f, -5.0f, 5.0f);
-
-			// Reset button
-			if (ImGui::Button("Reset Transform")) {
-				transform.scale = { 1.0f, 1.0f, 1.0f };
-				transform.rotate = { 0.0f, 0.0f, 0.0f };
-				transform.translate = { 0.0f, 0.0f, 0.0f };
+			ImGui::DragFloat3("Position", &transformSphere.translate.x, 0.01f, -10.0f, 10.0f);
+			// Reset
+			if (ImGui::Button("Reset Sphere")) {
+				transformSphere.scale = { 1.0f, 1.0f, 1.0f };
+				transformSphere.rotate = { 0.0f, 0.0f, 0.0f };
+				transformSphere.translate = { 0.0f, 0.0f, 1.0f };
 			}
-
 			ImGui::End();
 
 			ImGui::Render();
@@ -1347,16 +1462,24 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			commandList->SetGraphicsRootDescriptorTable(2, textureSrvHandleGPU);
 
 			// 1. Draw 3D Triangle(s) - Perspective
-			commandList->SetGraphicsRootConstantBufferView(0, wvpResource->GetGPUVirtualAddress());
-			commandList->IASetVertexBuffers(0, 1, &vertexBufferView);
-			commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-			commandList->DrawInstanced(6, 1, 0, 0);  
+			//commandList->SetGraphicsRootConstantBufferView(0, wvpResource->GetGPUVirtualAddress());
+			//commandList->IASetVertexBuffers(0, 1, &vertexBufferView);
+			//commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+			//commandList->DrawInstanced(6, 1, 0, 0);  
 
 			// 2. Draw Sprite - Orthographic (2D overlay)
 			commandList->SetGraphicsRootConstantBufferView(0, transformationMatrixResourceSprite->GetGPUVirtualAddress());
 			commandList->IASetVertexBuffers(0, 1, &vertexBufferViewSprite);
 			commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 			commandList->DrawInstanced(6, 1, 0, 0);  
+
+			// 3. Draw Sphere - Perspective
+			commandList->SetGraphicsRootConstantBufferView(0, sphereWVPResource->GetGPUVirtualAddress()); // or your own WVP for sphere
+
+			commandList->IASetVertexBuffers(0, 1, &sphereVertexBufferView);
+			//commandList->IASetIndexBuffer(&sphereMesh.indexBufferView);
+			commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+			commandList->DrawInstanced((UINT)sphere.vertices.size(), 1, 0, 0);
 
 		#ifdef USE_IMGUI
 			ImGui_ImplDX12_RenderDrawData(ImGui::GetDrawData(), commandList);
@@ -1401,6 +1524,8 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	//Close Handle / Close Window
 	CloseHandle(fenceEvent);
 	fence->Release();
+	if (sphereVertexResource) sphereVertexResource->Release();
+	if (sphereWVPResource) sphereWVPResource->Release();
 	vertexResourceSprite->Release();
 	vertexResource->Release();
 	wvpResource->Release();
