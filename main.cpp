@@ -478,6 +478,17 @@ static LONG WINAPI ExportDump(EXCEPTION_POINTERS* exception) {
 	return EXCEPTION_EXECUTE_HANDLER;
 }
 
+D3D12_CPU_DESCRIPTOR_HANDLE GetCPUDescriptorHandle(ID3D12DescriptorHeap* descriptorHeap, uint32_t descriptorSize, uint32_t index) {
+	D3D12_CPU_DESCRIPTOR_HANDLE handleCPU = descriptorHeap->GetCPUDescriptorHandleForHeapStart();
+	handleCPU.ptr += (descriptorSize * index);
+	return handleCPU;
+}
+
+D3D12_GPU_DESCRIPTOR_HANDLE GetGPUDescriptorHandle(ID3D12DescriptorHeap* descriptorHeap, uint32_t descriptorSize, uint32_t index) {
+	D3D12_GPU_DESCRIPTOR_HANDLE handleGPU = descriptorHeap->GetGPUDescriptorHandleForHeapStart();
+	return handleGPU;
+}
+
 //Shader compilation example (Before main loop)
 IDxcBlob* CompileShader(
 	const std::wstring& filePath,
@@ -874,9 +885,9 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 #ifdef _DEBUG
 	ID3D12InfoQueue* infoQueue = nullptr;
 	if (SUCCEEDED(device->QueryInterface(IID_PPV_ARGS(&infoQueue)))) {
-		//infoQueue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_CORRUPTION, true);
-		//infoQueue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_ERROR, true);
-		//infoQueue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_WARNING, true);
+		infoQueue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_CORRUPTION, true);
+		infoQueue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_ERROR, true);
+		infoQueue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_WARNING, true);
 		D3D12_MESSAGE_ID denyIds[] = {
 			D3D12_MESSAGE_ID_RESOURCE_BARRIER_MISMATCHING_COMMAND_LIST_TYPE
 		};
@@ -925,6 +936,14 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	DirectX::ScratchImage mipImages = LoadTexture("Resources/uvChecker.png");
 	const DirectX::TexMetadata& metadata = mipImages.GetMetadata();
 	ID3D12Resource* textureResource = CreateTextureResource(device, metadata);
+
+	DirectX::ScratchImage mipImages2 = LoadTexture("resources/monsterBall.png");
+	const DirectX::TexMetadata& metadata2 = mipImages2.GetMetadata();
+	ID3D12Resource* textureResource2 = CreateTextureResource(device, metadata2);
+	//UploadTextureData(textureResource2, mipImages2, device, commandList);
+
+	ID3D12Resource* intermediateResource = UploadTextureData(textureResource, mipImages, device, commandList);
+	ID3D12Resource* intermediateResource2 = UploadTextureData(textureResource2, mipImages2, device, commandList);
 
 	//Depth Stencil Buffer
 	ID3D12Resource* depthStencilResource = CreateDepthStencilTextureResource(device, kClientWidth, kClientHeight);
@@ -1233,6 +1252,10 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 	//--------------------cube
 
+	
+
+	//GetCPUDescriptorHandle(rtvDescriptorHeap, descriptorSizeRTV, 0); /////////////replace created functions that use DescriptorHandle 
+
 
 	//Pull Resources from Swap Chain (create rtv)
 	ID3D12Resource* swapChainResources[2] = { nullptr };
@@ -1259,6 +1282,12 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
 	srvDesc.Texture2D.MipLevels = UINT(metadata.mipLevels);
 
+	D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc2{};
+	srvDesc2.Format = metadata2.format;
+	srvDesc2.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+	srvDesc2.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+	srvDesc2.Texture2D.MipLevels = UINT(metadata2.mipLevels);
+
 	//Process screen Back Buffer to Front Buffer (Screen Swap)
 	UINT backBufferIndex = swapChain->GetCurrentBackBufferIndex();
 	D3D12_CPU_DESCRIPTOR_HANDLE dsvHandle = dsvDescriptorHeap->GetCPUDescriptorHandleForHeapStart();
@@ -1267,9 +1296,20 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	D3D12_GPU_DESCRIPTOR_HANDLE textureSrvHandleGPU = srvDescriptorHeap->GetGPUDescriptorHandleForHeapStart();
 	textureSrvHandleCPU.ptr += device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
 	textureSrvHandleGPU.ptr += device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+	device->CreateShaderResourceView(textureResource, &srvDesc, textureSrvHandleCPU);
+
+	const uint32_t descriptorSizeSRV = device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+	const uint32_t descriptorSizeRTV = device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
+	const uint32_t descriptorSizeDSV = device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_DSV);
+	D3D12_CPU_DESCRIPTOR_HANDLE textureSrvHandleCPU2 = GetCPUDescriptorHandle(srvDescriptorHeap, descriptorSizeSRV, 2);
+	D3D12_GPU_DESCRIPTOR_HANDLE textureSrvHandleGPU2 = GetGPUDescriptorHandle(srvDescriptorHeap, descriptorSizeSRV, 2);
+	
+	device->CreateShaderResourceView(textureResource2, &srvDesc2, textureSrvHandleCPU2);
 
 	//
 	float clearColor[] = { 0.1f, 0.25f, 0.5f, 1.0f };
+
+	bool useMonsterBall = true;
 	
 	////Fence (Before main loop)
 	ID3D12Fence* fence = nullptr;
@@ -1281,8 +1321,6 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	HANDLE fenceEvent = CreateEvent(NULL, FALSE, FALSE, NULL);
 	assert(fenceEvent != nullptr);
 	//
-
-	ID3D12Resource* intermediateResource = UploadTextureData(textureResource, mipImages, device, commandList);
 
 	hr = commandList->Close();
 	assert(SUCCEEDED(hr));
@@ -1321,9 +1359,6 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	commandAllocator->Reset();
 	commandList->Reset(commandAllocator, nullptr);
 	assert(SUCCEEDED(hr));
-	
-	
-	device->CreateShaderResourceView(textureResource, &srvDesc, textureSrvHandleCPU);
 
 	Log("Complete create D3D12Device!!!\n");
 
@@ -1343,7 +1378,8 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			// === Update ===
 			transform.rotate.y += 0.03f;  
 			Matrix4x4 worldMatrix = MakeAffineMatrix(transform.scale, transform.rotate, transform.translate);
-			Matrix4x4 viewMatrixSprite = MakeIdentity4x4(viewMatrixSprite);
+			Matrix4x4 viewMatrixSprite;
+			MakeIdentity4x4(viewMatrixSprite);
 
 			////WVP Matrix を作って書き込む
 			Matrix4x4 worldMatrixSprite = MakeAffineMatrix(transformSprite.scale, transformSprite.rotate, transformSprite.translate);
@@ -1414,6 +1450,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			ImGui::Begin("Sphere Editor");
 			ImGui::Text("Color RGB (Shared)");
 			if (ImGui::ColorEdit3("Sphere Color", &materialData->color.x)) {}
+			ImGui::Checkbox("useMonsterBall", &useMonsterBall);
 			ImGui::Separator();
 			// Scale
 			ImGui::DragFloat3("Scale", &transformSphere.scale.x, 0.01f, 0.1f, 10.0f);
@@ -1459,7 +1496,8 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 			// Material and Texture are shared
 			commandList->SetGraphicsRootConstantBufferView(1, materialResource->GetGPUVirtualAddress());
-			commandList->SetGraphicsRootDescriptorTable(2, textureSrvHandleGPU);
+			commandList->SetGraphicsRootDescriptorTable(2, useMonsterBall ? textureSrvHandleGPU2 : textureSrvHandleGPU);
+			
 
 			// 1. Draw 3D Triangle(s) - Perspective
 			//commandList->SetGraphicsRootConstantBufferView(0, wvpResource->GetGPUVirtualAddress());
@@ -1467,19 +1505,20 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			//commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 			//commandList->DrawInstanced(6, 1, 0, 0);  
 
-			// 2. Draw Sprite - Orthographic (2D overlay)
-			commandList->SetGraphicsRootConstantBufferView(0, transformationMatrixResourceSprite->GetGPUVirtualAddress());
-			commandList->IASetVertexBuffers(0, 1, &vertexBufferViewSprite);
-			commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-			commandList->DrawInstanced(6, 1, 0, 0);  
-
-			// 3. Draw Sphere - Perspective
-			commandList->SetGraphicsRootConstantBufferView(0, sphereWVPResource->GetGPUVirtualAddress()); // or your own WVP for sphere
-
+			// 2. Draw Sphere - Perspective
+			commandList->SetGraphicsRootConstantBufferView(0, sphereWVPResource->GetGPUVirtualAddress()); 
 			commandList->IASetVertexBuffers(0, 1, &sphereVertexBufferView);
 			//commandList->IASetIndexBuffer(&sphereMesh.indexBufferView);
 			commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 			commandList->DrawInstanced((UINT)sphere.vertices.size(), 1, 0, 0);
+
+			commandList->SetGraphicsRootDescriptorTable(2, textureSrvHandleGPU); //switch textureHandle before drawinng Sprite
+
+			// 3. Draw Sprite - Orthographic (2D overlay)
+			commandList->SetGraphicsRootConstantBufferView(0, transformationMatrixResourceSprite->GetGPUVirtualAddress());
+			commandList->IASetVertexBuffers(0, 1, &vertexBufferViewSprite);
+			commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+			commandList->DrawInstanced(6, 1, 0, 0);  
 
 		#ifdef USE_IMGUI
 			ImGui_ImplDX12_RenderDrawData(ImGui::GetDrawData(), commandList);
@@ -1541,6 +1580,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	vertexShaderBlob->Release();
 
 	textureResource->Release();
+	if (intermediateResource2) intermediateResource2->Release();
 	intermediateResource->Release(); 
 
 	depthStencilResource->Release();
