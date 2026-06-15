@@ -52,21 +52,33 @@ struct Matrix4x4 {
 	float m[4][4];
 };
 
-
 struct WorldTransform {
 	Vector3 scale;
 	Vector3 rotate;
 	Vector3 translate;
 };
 
+struct TransformationMatrix {
+	Matrix4x4 WVP;
+	Matrix4x4 World;
+	//float padding[4];
+};
+struct DirectionalLight {
+	Vector4 color;
+	Vector3 direction;
+	float intensity;
+};
+
 struct VertexData {
 	Vector4 position;
 	Vector2 texcoord;
+	Vector3 normal;
 	float radius;
 };
 
 struct Material {
 	Vector4 color;
+	bool enableLighting;
 };
 
 struct SphereMesh {
@@ -74,6 +86,8 @@ struct SphereMesh {
 };
 
 float pi = 3.14f;
+
+
 
 Matrix4x4 MakeIdentity4x4(Matrix4x4& matrix) {
 	for (int i = 0; i < 4; ++i) {
@@ -506,7 +520,11 @@ IDxcBlob* CompileShader(
 
 IDxcBlobEncoding* shaderSource = nullptr;
 HRESULT hr = dxcUtils->LoadFile(filePath.c_str(), nullptr, &shaderSource);
-assert(SUCCEEDED(hr));
+//assert(SUCCEEDED(hr));
+if (FAILED(hr)) {
+	Log(std::format("Failed to load shader file: {}\n", ConvertString(filePath)));
+	Log(std::format("HRESULT = 0x{:08X}\n", static_cast<unsigned int>(hr)));
+}
 
 DxcBuffer shaderSourceBuffer;
 shaderSourceBuffer.Ptr = shaderSource->GetBufferPointer();
@@ -539,11 +557,13 @@ shaderResult->GetStatus(&compileStatus);
 IDxcBlobUtf8* shaderError = nullptr;
 shaderResult->GetOutput(DXC_OUT_ERRORS, IID_PPV_ARGS(&shaderError), nullptr);
 if (shaderError != nullptr && shaderError->GetStringLength() != 0) {
+	Log("=== Shader Compiler Output ===");
 	Log(shaderError->GetStringPointer());
+	shaderError->Release();
 }
+
 if (FAILED(compileStatus)) {
 	Log("=== Shader Compilation FAILED ===\n");
-	//assert(false); // or return nullptr
 	return nullptr;
 }
 //4. compile results return
@@ -978,17 +998,23 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	descriptorRange[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
 	descriptorRange[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
 
-	D3D12_ROOT_PARAMETER rootParameters[3] = {};
+	D3D12_ROOT_PARAMETER rootParameters[4] = {};
 	rootParameters[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
 	rootParameters[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_VERTEX;
 	rootParameters[0].Descriptor.ShaderRegister = 0;
+
 	rootParameters[1].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
 	rootParameters[1].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
-	rootParameters[1].Descriptor.ShaderRegister = 1;
+	rootParameters[1].Descriptor.ShaderRegister = 0;
+
 	rootParameters[2].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
 	rootParameters[2].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
 	rootParameters[2].DescriptorTable.pDescriptorRanges = descriptorRange;
 	rootParameters[2].DescriptorTable.NumDescriptorRanges = 1; // _countof(descriptorRange);
+
+	rootParameters[3].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
+	rootParameters[3].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+	rootParameters[3].Descriptor.ShaderRegister = 1; //b1
 
 
 	D3D12_STATIC_SAMPLER_DESC staticSamplers[1] = {};
@@ -1007,7 +1033,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	descriptionRootSignature.NumParameters = _countof(rootParameters);
 
 	//WVP Resource (For use for one size)
-	ID3D12Resource* wvpResource = CreateBufferResource(device, sizeof(Matrix4x4));
+	ID3D12Resource* wvpResource = CreateBufferResource(device, sizeof(TransformationMatrix));
 	wvpResource->SetName(L"wvpResource");
 	Matrix4x4* wvpData = nullptr;
 	wvpResource->Map(0, nullptr, reinterpret_cast<void**>(&wvpData));
@@ -1019,6 +1045,23 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	Material* materialData = nullptr;
 	materialResource->Map(0, nullptr, reinterpret_cast<void**>(&materialData));
 	materialData->color = { 1.0f, 1.0f, 1.0f, 1.0f }; //-----------Color of the Triangle-----------//
+
+	//Material Resource for Lighting 
+	ID3D12Resource* materialResourceSprite = CreateBufferResource(device, sizeof(Material));
+	materialResourceSprite->SetName(L"materialResourceSprite");
+	Material* materialSpriteData = nullptr;
+	materialResourceSprite->Map(0, nullptr, reinterpret_cast<void**>(&materialSpriteData));
+	materialSpriteData->color = { 1.0f, 1.0f, 1.0f, 1.0f }; //Lighting color
+	materialSpriteData->enableLighting = false;
+
+	//Directional light values
+	ID3D12Resource* materialResourceLight = CreateBufferResource(device, sizeof(Material));
+	materialResourceLight->SetName(L"materialResourceLight");
+	DirectionalLight* directionalLightData = nullptr;
+	materialResourceLight->Map(0, nullptr, reinterpret_cast<void**>(&directionalLightData));
+	directionalLightData->color = { 1.0f, 1.0f, 1.0f, 1.0f };
+	directionalLightData->direction = { 0.0f, -1.0f, 0.0f };
+	directionalLightData->intensity = 1.0f;
 
 	//Serialize and make into binary
 	ID3DBlob* signatureBlob = nullptr;
@@ -1037,7 +1080,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	assert(SUCCEEDED(hr));
 
 	//Input Layout
-	D3D12_INPUT_ELEMENT_DESC inputElementDescs[2] = {};
+	D3D12_INPUT_ELEMENT_DESC inputElementDescs[3] = {};
 	inputElementDescs[0].SemanticName = "POSITION";
 	inputElementDescs[0].SemanticIndex = 0;
 	inputElementDescs[0].Format = DXGI_FORMAT_R32G32B32A32_FLOAT;
@@ -1046,6 +1089,10 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	inputElementDescs[1].SemanticIndex = 0;
 	inputElementDescs[1].Format = DXGI_FORMAT_R32G32_FLOAT;
 	inputElementDescs[1].AlignedByteOffset = D3D12_APPEND_ALIGNED_ELEMENT;
+	inputElementDescs[2].SemanticName = "NORMAL";
+	inputElementDescs[2].SemanticIndex = 0;
+	inputElementDescs[2].Format = DXGI_FORMAT_R32G32B32_FLOAT;
+	inputElementDescs[2].AlignedByteOffset = D3D12_APPEND_ALIGNED_ELEMENT;
 	D3D12_INPUT_LAYOUT_DESC inputLayoutDesc{};
 	inputLayoutDesc.pInputElementDescs = inputElementDescs;
 	inputLayoutDesc.NumElements = _countof(inputElementDescs);
@@ -1155,17 +1202,39 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	vertexResource->Map(0, nullptr, reinterpret_cast<void**>(&vertexData));
 	vertexData[0].position = { -0.5f, -0.5f, 0.0f, 1.0f };
 	vertexData[0].texcoord = { 0.0f, 1.0f };
+	vertexData[0].normal.x = vertexData[0].position.x;
+	vertexData[0].normal.y = vertexData[0].position.y;
+	vertexData[0].normal.z = vertexData[0].position.z;
+
 	vertexData[1].position = { 0.0f, 0.5f, 0.0f, 1.0f };
 	vertexData[1].texcoord = { 0.5f, 0.0f };
+	vertexData[1].normal.x = vertexData[1].position.x;
+	vertexData[1].normal.y = vertexData[1].position.y;
+	vertexData[1].normal.z = vertexData[1].position.z;
+
 	vertexData[2].position = { 0.5f, -0.5f, 0.0f, 1.0f };
 	vertexData[2].texcoord = { 1.0f, 1.0f };
+	vertexData[2].normal.x = vertexData[2].position.x;
+	vertexData[2].normal.y = vertexData[2].position.y;
+	vertexData[2].normal.z = vertexData[2].position.z;
 
 	vertexData[3].position = { -0.5f, -0.5f, 0.5f, 1.0f };
 	vertexData[3].texcoord = { 0.0f, 1.0f };
+	vertexData[3].normal.x = vertexData[3].position.x;
+	vertexData[3].normal.y = vertexData[3].position.y;
+	vertexData[3].normal.z = vertexData[3].position.z;
+
 	vertexData[4].position = { 0.0f, 0.0f, 0.0f, 1.0f };
 	vertexData[4].texcoord = { 0.5f, 0.0f };
+	vertexData[4].normal.x = vertexData[4].position.x;
+	vertexData[4].normal.y = vertexData[4].position.y;
+	vertexData[4].normal.z = vertexData[4].position.z;
+
 	vertexData[5].position = { 0.5f, -0.5f, -0.5f, 1.0f };
 	vertexData[5].texcoord = { 1.0f, 1.0f };
+	vertexData[5].normal.x = vertexData[5].position.x;
+	vertexData[5].normal.y = vertexData[5].position.y;
+	vertexData[5].normal.z = vertexData[5].position.z;
 
 	//Viewport and Scissor
 	D3D12_VIEWPORT viewport{};
@@ -1195,20 +1264,30 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	vertexResourceSprite->Map(0, nullptr, reinterpret_cast<void**>(&vertexDataSprite));
 	vertexDataSprite[0].position = { 0.0f, 360.0f, 0.0f, 1.0f };
 	vertexDataSprite[0].texcoord = { 0.0f, 1.0f };
+	vertexDataSprite[0].normal = { 0.0f, 0.0f, -1.0f };
+
 	vertexDataSprite[1].position = { 0.0f, 0.0f, 0.0f, 1.0f };
 	vertexDataSprite[1].texcoord = { 0.0f, 0.0f };
+	vertexDataSprite[1].normal = { 0.0f, 0.0f, -1.0f };
+
 	vertexDataSprite[2].position = { 640.0f, 360.0f, 0.0f, 1.0f };
 	vertexDataSprite[2].texcoord = { 1.0f, 1.0f };
+	vertexDataSprite[2].normal = { 0.0f, 0.0f, -1.0f };
 	
 	vertexDataSprite[3].position = { 0.0f, 0.0f, 0.0f, 1.0f };
 	vertexDataSprite[3].texcoord = { 0.0f, 0.0f };
+	vertexDataSprite[3].normal = { 0.0f, 0.0f, -1.0f };
+
 	vertexDataSprite[4].position = { 640.0f, 0.0f, 0.0f, 1.0f };
 	vertexDataSprite[4].texcoord = { 1.0f, 0.0f };
+	vertexDataSprite[4].normal = { 0.0f, 0.0f, -1.0f };
+
 	vertexDataSprite[5].position = { 640.0f, 360.0f, 0.0f, 1.0f };
 	vertexDataSprite[5].texcoord = { 1.0f, 1.0f };
+	vertexDataSprite[5].normal = { 0.0f, 0.0f, -1.0f };
 
 	////transform 
-	ID3D12Resource* transformationMatrixResourceSprite = CreateBufferResource(device, sizeof(Matrix4x4));
+	ID3D12Resource* transformationMatrixResourceSprite = CreateBufferResource(device, sizeof(TransformationMatrix));
 	transformationMatrixResourceSprite->SetName(L"transformationMatrixResourceSprite");
 	Matrix4x4* transformationMatrixDataSprite = nullptr;
 	transformationMatrixResourceSprite->Map(0, nullptr, reinterpret_cast<void**>(&transformationMatrixDataSprite));
@@ -1240,12 +1319,12 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	sphereVertexResource->Unmap(0, nullptr);
 
 	// Create dedicated WVP constant buffer for sphere
-	ID3D12Resource* sphereWVPResource = CreateBufferResource(device, sizeof(Matrix4x4));
+	ID3D12Resource* sphereWVPResource = CreateBufferResource(device, sizeof(TransformationMatrix));
 	sphereWVPResource->SetName(L"sphereWVPResource");
 
-	Matrix4x4* sphereWVPData = nullptr;
-	sphereWVPResource->Map(0, nullptr, reinterpret_cast<void**>(&sphereWVPData));
-	MakeIdentity4x4(*sphereWVPData);
+	TransformationMatrix* sphereTransformData = nullptr;
+	sphereWVPResource->Map(0, nullptr, reinterpret_cast<void**>(&sphereTransformData));
+	//MakeIdentity4x4(*sphereTransformData);
 	//--------------------cube end
 
 	//Pull Resources from Swap Chain (create rtv)
@@ -1390,8 +1469,10 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			Matrix4x4 sphereProjectionMatrix = MakePerspectiveFovMatrix(0.45f, float(kClientWidth) / float(kClientHeight), 0.1f, 100.0f);
 			Matrix4x4 sphereViewProjectionMatrix = Multiply(worldSphereMatrix, Multiply(worldSphereMatrix, sphereProjectionMatrix));
 			
-			Matrix4x4 sphereWVP = Multiply(worldSphereMatrix, Multiply(viewMatrix, projectionMatrix));
-			*sphereWVPData = sphereWVP;
+			Matrix4x4 wvpMatrixSphere = Multiply(worldSphereMatrix, Multiply(viewMatrix, projectionMatrix));
+			sphereTransformData->WVP = wvpMatrixSphere;
+			sphereTransformData->World = worldSphereMatrix;
+			
 			
 #ifdef USE_IMGUI
 			//ImGui::ShowDemoWindow();
@@ -1453,6 +1534,18 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 				transformSphere.rotate = { 0.0f, 0.0f, 0.0f };
 				transformSphere.translate = { 0.0f, 0.0f, 1.0f };
 			}
+			ImGui::Separator();
+			ImGui::Checkbox("enableLighting", &materialSpriteData->enableLighting);
+			if (ImGui::ColorEdit3("LightColor", &directionalLightData->color.x)) {}
+			ImGui::DragFloat3("LightDirection", &directionalLightData->direction.x, 0.01f, -1.0f, 1.0f);
+			ImGui::DragFloat("Intensity", &directionalLightData->intensity, 0.01f, -1.0f, 2.0f);
+
+
+			//materialSpriteData->enableLighting = false;
+			//directionalLightData->color = { 1.0f, 1.0f, 1.0f, 1.0f };
+			//directionalLightData->direction = { 0.0f, -1.0f, 0.0f };
+			//directionalLightData->intensity = 1.0f;
+
 			ImGui::End();
 
 			ImGui::Render();
@@ -1484,7 +1577,8 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			commandList->SetDescriptorHeaps(_countof(descriptorHeaps), descriptorHeaps);
 
 			// Material and Texture are shared
-			commandList->SetGraphicsRootConstantBufferView(1, materialResource->GetGPUVirtualAddress());
+			commandList->SetGraphicsRootConstantBufferView(1, materialResourceSprite->GetGPUVirtualAddress());
+			commandList->SetGraphicsRootConstantBufferView(3, materialResourceLight->GetGPUVirtualAddress());
 			commandList->SetGraphicsRootDescriptorTable(2, useMonsterBall ? textureSrvHandleGPU2 : textureSrvHandleGPU);
 			
 
@@ -1552,11 +1646,12 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	//Close Handle / Close Window
 	CloseHandle(fenceEvent);
 	fence->Release();
-	if (sphereVertexResource) sphereVertexResource->Release();
-	if (sphereWVPResource) sphereWVPResource->Release();
 	vertexResourceSprite->Release();
 	vertexResource->Release();
 	wvpResource->Release();
+	if (sphereVertexResource) sphereVertexResource->Release();
+	if (sphereWVPResource) sphereWVPResource->Release();
+	if (materialResourceLight) materialResourceLight->Release();
 	materialResource->Release();
 
 	graphicsPipelineState->Release();
