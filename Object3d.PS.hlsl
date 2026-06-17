@@ -26,15 +26,23 @@ PixelShaderOutput main(VertexShaderOutput input) {
     PixelShaderOutput output;
     
     float4 textureColor = gTexture.Sample(gSampler, input.texcoord);
+    float4 color = gMaterial.color * textureColor;
+
+    //if (gMaterial.enableLighting != 0) {
+    //    float cos = saturate(dot(normalize(input.normal), -gDirectionalLight.direction));
+    //}
+    //else {
+    //    output.color = gMaterial.color * textureColor;
+    //}
     
-    //output.color = textureColor * gMaterial.color;
+    if (gMaterial.enableLighting != 0)
+    {
+        float3 normal = normalize(input.normal);
+        float NdotL = saturate(dot(normal, -gDirectionalLight.direction));
+        color.rgb *= gDirectionalLight.color.rgb * NdotL * gDirectionalLight.intensity;
+    }
     
-    if (gMaterial.enableLighting != 0) {
-        float cos = saturate(dot(normalize(input.normal), -gDirectionalLight.direction));
-    }
-    else {
-        output.color = gMaterial.color * textureColor;
-    }
+    output.color = color;
     
     return output;
 }

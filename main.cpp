@@ -73,12 +73,11 @@ struct VertexData {
 	Vector4 position;
 	Vector2 texcoord;
 	Vector3 normal;
-	float radius;
 };
 
 struct Material {
 	Vector4 color;
-	bool enableLighting;
+	int32_t enableLighting;
 };
 
 struct SphereMesh {
@@ -86,8 +85,6 @@ struct SphereMesh {
 };
 
 float pi = 3.14f;
-
-
 
 Matrix4x4 MakeIdentity4x4(Matrix4x4& matrix) {
 	for (int i = 0; i < 4; ++i) {
@@ -674,8 +671,8 @@ ID3D12Resource* CreateDepthStencilTextureResource(ID3D12Device* device, UINT wid
 
 	D3D12_HEAP_PROPERTIES heapProperties{};
 	heapProperties.Type = D3D12_HEAP_TYPE_DEFAULT;
-	heapProperties.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN;      // ✅ Fixed
-	heapProperties.MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN;       // ✅ Fixed
+	heapProperties.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN;      
+	heapProperties.MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN;       
 
 	D3D12_CLEAR_VALUE depthClearValue{};
 	depthClearValue.DepthStencil.Depth = 1.0f;
@@ -759,33 +756,51 @@ SphereMesh DrawSphere(const uint32_t subdivision, float radius) {
 			vertexData[0].position.z = radius * cos(lat) * sin(lon);
 			vertexData[0].position.w = 1.0f;
 			vertexData[0].texcoord = { u, v }; //a
+			vertexData[0].normal = { vertexData[0].position.x, vertexData[0].position.y, vertexData[0].position.z };
 			
 			vertexData[1].position.x = radius * cos(latNext) * cosf(lon);
 			vertexData[1].position.y = radius * sin(latNext);
 			vertexData[1].position.z = radius * cos(latNext) * sin(lon);
 			vertexData[1].position.w = 1.0f;
 			vertexData[1].texcoord = { u, vNext };  //b
+			vertexData[1].normal = { vertexData[1].position.x, vertexData[1].position.y, vertexData[1].position.z };
 			
 			vertexData[2].position.x = radius * cos(lat) * cosf(lonNext);
 			vertexData[2].position.y = radius * sin(lat);
 			vertexData[2].position.z = radius * cos(lat) * sin(lonNext);
 			vertexData[2].position.w = 1.0f;
 			vertexData[2].texcoord = { uNext, v }; //c
+			vertexData[2].normal = { vertexData[2].position.x, vertexData[2].position.y, vertexData[2].position.z };
 
 			vertexData[3].position = vertexData[2].position;
 			vertexData[3].texcoord = vertexData[2].texcoord;
+			vertexData[3].normal = { vertexData[3].position.x, vertexData[3].position.y, vertexData[3].position.z };
 
 			vertexData[4].position = vertexData[1].position;
 			vertexData[4].texcoord = vertexData[1].texcoord;
+			vertexData[4].normal = { vertexData[4].position.x, vertexData[4].position.y, vertexData[4].position.z };
 
 			vertexData[5].position.x = radius * cos(latNext) * cosf(lonNext);
 			vertexData[5].position.y = radius * sin(latNext);
 			vertexData[5].position.z = radius * cos(latNext) * sin(lonNext);
 			vertexData[5].position.w = 1.0f;
 			vertexData[5].texcoord = { uNext, vNext}; //d
+			vertexData[5].normal = { vertexData[5].position.x, vertexData[5].position.y, vertexData[5].position.z };
 
+			//vertices
 			for (int i = 0; i < 6; ++i) {
 				mesh.vertices.push_back(vertexData[i]);
+			}
+			// Normalize 
+			for (auto& v : mesh.vertices) {
+				float length = sqrtf(v.normal.x * v.normal.x +
+					v.normal.y * v.normal.y +
+					v.normal.z * v.normal.z);
+				if (length > 0.0f) {
+					v.normal.x /= length;
+					v.normal.y /= length;
+					v.normal.z /= length;
+				}
 			}
 		}
 	}
@@ -905,9 +920,9 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 #ifdef _DEBUG
 	ID3D12InfoQueue* infoQueue = nullptr;
 	if (SUCCEEDED(device->QueryInterface(IID_PPV_ARGS(&infoQueue)))) {
-		infoQueue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_CORRUPTION, true);
-		infoQueue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_ERROR, true);
-		infoQueue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_WARNING, true);
+		//infoQueue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_CORRUPTION, true);
+		//infoQueue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_ERROR, true);
+		//infoQueue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_WARNING, true);
 		D3D12_MESSAGE_ID denyIds[] = {
 			D3D12_MESSAGE_ID_RESOURCE_BARRIER_MISMATCHING_COMMAND_LIST_TYPE
 		};
@@ -1324,7 +1339,6 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 	TransformationMatrix* sphereTransformData = nullptr;
 	sphereWVPResource->Map(0, nullptr, reinterpret_cast<void**>(&sphereTransformData));
-	//MakeIdentity4x4(*sphereTransformData);
 	//--------------------cube end
 
 	//Pull Resources from Swap Chain (create rtv)
@@ -1378,6 +1392,8 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	float clearColor[] = { 0.1f, 0.25f, 0.5f, 1.0f };
 
 	bool useMonsterBall = true;
+
+	bool isLight = false;
 	
 	////Fence (Before main loop)
 	ID3D12Fence* fence = nullptr;
@@ -1467,7 +1483,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			Matrix4x4 worldSphereMatrix = MakeAffineMatrix(transformSphere.scale, transformSphere.rotate, transformSphere.translate);
 			//Matrix4x4 sphereInverseMatrix = Inverse(worldSphereMatrix);
 			Matrix4x4 sphereProjectionMatrix = MakePerspectiveFovMatrix(0.45f, float(kClientWidth) / float(kClientHeight), 0.1f, 100.0f);
-			Matrix4x4 sphereViewProjectionMatrix = Multiply(worldSphereMatrix, Multiply(worldSphereMatrix, sphereProjectionMatrix));
+			Matrix4x4 sphereViewProjectionMatrix = Multiply(worldSphereMatrix, sphereProjectionMatrix);
 			
 			Matrix4x4 wvpMatrixSphere = Multiply(worldSphereMatrix, Multiply(viewMatrix, projectionMatrix));
 			sphereTransformData->WVP = wvpMatrixSphere;
@@ -1477,25 +1493,25 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 #ifdef USE_IMGUI
 			//ImGui::ShowDemoWindow();
 
-			ImGui::Begin("Sprite Editor");
-			ImGui::Text("Color RGB (Shared)");
-			if (ImGui::ColorEdit3("Triangle Color", &materialData->color.x)) {
-			}
-			ImGui::Separator();
-			// Scale
-			ImGui::DragFloat3("Scale", &transformSprite.scale.x, 0.01f, 0.1f, 10.0f);
-			// Rotation
-			if (ImGui::DragFloat3("Rotation", &transformSprite.rotate.x, 0.03f, -10.0f, 10.0f)) {
-			}
-			// Translation
-			ImGui::DragFloat3("Position", &transformSprite.translate.x, 1.0f, 0.0f, 640.0f);
-			// Reset button
-			if (ImGui::Button("Reset Transform")) {
-				transformSprite.scale = { 1.0f, 1.0f, 1.0f };
-				transformSprite.rotate = { 0.0f, 0.0f, 0.0f };
-				transformSprite.translate = { 0.0f, 0.0f, 0.0f };
-			}
-			ImGui::End();
+			//ImGui::Begin("Sprite Editor");
+			//ImGui::Text("Color RGB (Shared)");
+			//if (ImGui::ColorEdit3("Triangle Color", &materialData->color.x)) {
+			//}
+			//ImGui::Separator();
+			//// Scale
+			//ImGui::DragFloat3("Scale", &transformSprite.scale.x, 0.01f, 0.1f, 10.0f);
+			//// Rotation
+			//if (ImGui::DragFloat3("Rotation", &transformSprite.rotate.x, 0.03f, -10.0f, 10.0f)) {
+			//}
+			//// Translation
+			//ImGui::DragFloat3("Position", &transformSprite.translate.x, 1.0f, 0.0f, 640.0f);
+			//// Reset button
+			//if (ImGui::Button("Reset Transform")) {
+			//	transformSprite.scale = { 1.0f, 1.0f, 1.0f };
+			//	transformSprite.rotate = { 0.0f, 0.0f, 0.0f };
+			//	transformSprite.translate = { 0.0f, 0.0f, 0.0f };
+			//}
+			//ImGui::End();
 
 			//ImGui::Begin("Triangle Editor");
 			//ImGui::Text("Color RGB (Shared)");
@@ -1519,7 +1535,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 			ImGui::Begin("Sphere Editor");
 			ImGui::Text("Color RGB (Shared)");
-			if (ImGui::ColorEdit3("Sphere Color", &materialData->color.x)) {}
+			if (ImGui::ColorEdit3("Sphere Color", &materialSpriteData->color.x)) {}
 			ImGui::Checkbox("useMonsterBall", &useMonsterBall);
 			ImGui::Separator();
 			// Scale
@@ -1535,18 +1551,18 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 				transformSphere.translate = { 0.0f, 0.0f, 1.0f };
 			}
 			ImGui::Separator();
-			ImGui::Checkbox("enableLighting", &materialSpriteData->enableLighting);
+			ImGui::Checkbox("enableLighting", &isLight);
+			if (isLight) {
+				materialSpriteData->enableLighting = 1;
+			}
+			else {
+				materialSpriteData->enableLighting = 0;
+			}
 			if (ImGui::ColorEdit3("LightColor", &directionalLightData->color.x)) {}
 			ImGui::DragFloat3("LightDirection", &directionalLightData->direction.x, 0.01f, -1.0f, 1.0f);
 			ImGui::DragFloat("Intensity", &directionalLightData->intensity, 0.01f, -1.0f, 2.0f);
-
-
-			//materialSpriteData->enableLighting = false;
-			//directionalLightData->color = { 1.0f, 1.0f, 1.0f, 1.0f };
-			//directionalLightData->direction = { 0.0f, -1.0f, 0.0f };
-			//directionalLightData->intensity = 1.0f;
-
 			ImGui::End();
+
 
 			ImGui::Render();
 #endif
@@ -1591,17 +1607,16 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			// 2. Draw Sphere - Perspective
 			commandList->SetGraphicsRootConstantBufferView(0, sphereWVPResource->GetGPUVirtualAddress()); 
 			commandList->IASetVertexBuffers(0, 1, &sphereVertexBufferView);
-			//commandList->IASetIndexBuffer(&sphereMesh.indexBufferView);
 			commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 			commandList->DrawInstanced((UINT)sphere.vertices.size(), 1, 0, 0);
 
 			commandList->SetGraphicsRootDescriptorTable(2, textureSrvHandleGPU); //switch textureHandle before drawinng Sprite
 
-			// 3. Draw Sprite - Orthographic (2D overlay)
-			commandList->SetGraphicsRootConstantBufferView(0, transformationMatrixResourceSprite->GetGPUVirtualAddress());
-			commandList->IASetVertexBuffers(0, 1, &vertexBufferViewSprite);
-			commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-			commandList->DrawInstanced(6, 1, 0, 0);  
+			//// 3. Draw Sprite - Orthographic (2D overlay)
+			//commandList->SetGraphicsRootConstantBufferView(0, transformationMatrixResourceSprite->GetGPUVirtualAddress());
+			//commandList->IASetVertexBuffers(0, 1, &vertexBufferViewSprite);
+			//commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+			//commandList->DrawInstanced(6, 1, 0, 0);  
 
 		#ifdef USE_IMGUI
 			ImGui_ImplDX12_RenderDrawData(ImGui::GetDrawData(), commandList);
