@@ -1075,7 +1075,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	DirectionalLight* directionalLightData = nullptr;
 	materialResourceLight->Map(0, nullptr, reinterpret_cast<void**>(&directionalLightData));
 	directionalLightData->color = { 1.0f, 1.0f, 1.0f, 1.0f };
-	directionalLightData->direction = { 0.0f, -1.0f, 0.0f };
+	directionalLightData->direction = { 0.0f, -1.0f, 2.0f };
 	directionalLightData->intensity = 1.0f;
 
 	//Serialize and make into binary
@@ -1559,8 +1559,14 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 				materialSpriteData->enableLighting = 0;
 			}
 			if (ImGui::ColorEdit3("LightColor", &directionalLightData->color.x)) {}
-			ImGui::DragFloat3("LightDirection", &directionalLightData->direction.x, 0.01f, -1.0f, 1.0f);
-			ImGui::DragFloat("Intensity", &directionalLightData->intensity, 0.01f, -1.0f, 2.0f);
+			ImGui::DragFloat3("LightDirection", &directionalLightData->direction.x, 0.01f, -2.0f, 2.0f);
+			ImGui::DragFloat("Intensity", &directionalLightData->intensity, 0.01f, 0.0f, 2.0f);
+			if (ImGui::Button("Reset Lighting")) {
+				materialSpriteData->color = { 1.0f, 1.0f, 1.0f, 1.0f };
+				directionalLightData->color = { 1.0f, 1.0f, 1.0f, 1.0f };
+				directionalLightData->direction = { 0.0f, -1.0f, 2.0f };
+				directionalLightData->intensity = 1.0f;
+			}
 			ImGui::End();
 
 
