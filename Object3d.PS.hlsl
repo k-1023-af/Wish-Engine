@@ -6,7 +6,8 @@ struct Material
 {
     float4 color;
     int32_t enableLighting;
-    //float3 padding;
+   // float padding[3]; // Padding to align the next member to a 16-byte boundary
+    float32_t4x4 uvTransform;
 };
 
 Texture2D<float4> gTexture : register(t0);
@@ -25,7 +26,9 @@ ConstantBuffer<DirectionalLight> gDirectionalLight : register(b1);
 PixelShaderOutput main(VertexShaderOutput input) {
     PixelShaderOutput output;
     
-    float4 textureColor = gTexture.Sample(gSampler, input.texcoord);
+    float3 transformedUV = mul(float32_t(input.texcoord, 1.0f), gMaterial.uvTransform);
+    //float4 textureColor = gTexture.Sample(gSampler, input.texcoord);
+    float32_t4 textureColor = gTexture.Sample(gSampler, transformedUV.xy);
     float4 color = gMaterial.color * textureColor;
     
     if (gMaterial.enableLighting != 0)

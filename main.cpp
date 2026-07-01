@@ -48,6 +48,10 @@ struct Vector4 {
 	float x, y, z, w;
 };
 
+struct Matrix3x3 {
+	float m[3][3];
+};
+
 struct Matrix4x4 {
 	float m[4][4];
 };
@@ -78,6 +82,7 @@ struct VertexData {
 struct Material {
 	Vector4 color;
 	int32_t enableLighting;
+	Matrix4x4 uvTransform;
 };
 
 struct SphereMesh {
@@ -216,6 +221,27 @@ Matrix4x4 MakeAffineMatrix(Vector3 scale, Vector3 rotate, Vector3 translate) {
 	result.m[3][2] = translate.z;
 	result.m[3][3] = 1;
 
+	return result;
+}
+
+Matrix4x4 MakeTranslateMatrix(Vector3 translate) {
+	Matrix4x4 result;
+	result.m[0][0] = 1;
+	result.m[0][1] = 0;
+	result.m[0][2] = 0;
+	result.m[0][3] = 0;
+	result.m[1][0] = 0;
+	result.m[1][1] = 1;
+	result.m[1][2] = 0;
+	result.m[1][3] = 0;
+	result.m[2][0] = 0;
+	result.m[2][1] = 0;
+	result.m[2][2] = 1;
+	result.m[2][3] = 0;
+	result.m[3][0] = translate.x;
+	result.m[3][1] = translate.y;
+	result.m[3][2] = translate.z;
+	result.m[3][3] = 1;
 	return result;
 }
 
@@ -385,6 +411,11 @@ WorldTransform cameraTransform = {
 	{ 0.0f, 0.0f, -5.0f } // translate (move camera back along z-axis)
 };
 
+//WorldTransform uvTransform = { 
+//	{ 1.0f, 1.0f, 1.0f }, // scale
+//	{ 0.0f, 0.0f, 0.0f }, // rotate
+//	{ 0.0f, 0.0f, 0.0f }  // translate
+//};
 
 // Forward declarations to fix C3861: 'ConvertString' identifier not found
 std::wstring ConvertString(const std::string& str);
@@ -1076,8 +1107,13 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	materialResource->SetName(L"materialResource");
 	Material* materialData = nullptr;
 	materialResource->Map(0, nullptr, reinterpret_cast<void**>(&materialData));
-	materialData->color = { 1.0f, 1.0f, 1.0f, 1.0f }; //-----------Color of the Triangle-----------//
-
+	materialData->color = { 1.0f, 1.0f, 1.0f, 1.0f }; //-----Color of the Triangle--------//
+	materialData->uvTransform = { //---UV Transform of the Triangle----//
+			1.0f, 0.0f, 0.0f, 
+			0.0f, 1.0f, 0.0f,
+			0.0f, 0.0f, 1.0f
+	};
+	
 	//Material Resource for Lighting 
 	ID3D12Resource* materialResourceSprite = CreateBufferResource(device, sizeof(Material));
 	materialResourceSprite->SetName(L"materialResourceSprite");
@@ -1085,6 +1121,11 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	materialResourceSprite->Map(0, nullptr, reinterpret_cast<void**>(&materialSpriteData));
 	materialSpriteData->color = { 1.0f, 1.0f, 1.0f, 1.0f }; //Lighting color
 	materialSpriteData->enableLighting = false;
+	materialSpriteData->uvTransform = {
+		 1.0f, 0.0f, 0.0f,
+		 0.0f, 1.0f, 0.0f,
+		 0.0f, 0.0f, 1.0f 
+	};
 
 	//Directional light values
 	ID3D12Resource* materialResourceLight = CreateBufferResource(device, sizeof(Material));
@@ -1156,7 +1197,6 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	IDxcBlob* pixelShaderBlob = CompileShader(L"Object3d.PS.hlsl", L"ps_6_0", dxcUtils, dxcCompiler, includeHandler);
 	assert(pixelShaderBlob != nullptr);
 	assert(vertexShaderBlob && pixelShaderBlob);
-
 	
 
 	D3D12_DEPTH_STENCIL_VIEW_DESC dsvDesc{};
@@ -1506,29 +1546,40 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			sphereTransformData->WVP = wvpMatrixSphere;
 			sphereTransformData->World = worldSphereMatrix;
 			
-			
+			//UV Transform
+			Matrix4x4 uvTransformMatrix = MakeIdentity4x4(uvTransformSprite.scale);
+			uvTransformMatrix = Multiply(uvTransformMatrix, MakeRotateZMatrix(uvTransformSprite.rotate.z));
+			uvTransformMatrix = Multiply(uvTransformMatrix, MakeTranslateMatrix(uvTransformSprite.translate));
+			materialDataSprite->uvTransform = uvTransformMatrix;
+
+
 #ifdef USE_IMGUI
 			//ImGui::ShowDemoWindow();
 
-			//ImGui::Begin("Sprite Editor");
-			//ImGui::Text("Color RGB (Shared)");
-			//if (ImGui::ColorEdit3("Triangle Color", &materialData->color.x)) {
-			//}
-			//ImGui::Separator();
-			//// Scale
-			//ImGui::DragFloat3("Scale", &transformSprite.scale.x, 0.01f, 0.1f, 10.0f);
-			//// Rotation
-			//if (ImGui::DragFloat3("Rotation", &transformSprite.rotate.x, 0.03f, -10.0f, 10.0f)) {
-			//}
-			//// Translation
-			//ImGui::DragFloat3("Position", &transformSprite.translate.x, 1.0f, 0.0f, 640.0f);
-			//// Reset button
-			//if (ImGui::Button("Reset Transform")) {
-			//	transformSprite.scale = { 1.0f, 1.0f, 1.0f };
-			//	transformSprite.rotate = { 0.0f, 0.0f, 0.0f };
-			//	transformSprite.translate = { 0.0f, 0.0f, 0.0f };
-			//}
-			//ImGui::End();
+			ImGui::Begin("Sprite Editor");
+			ImGui::Text("Color RGB (Shared)");
+			if (ImGui::ColorEdit3("Triangle Color", &materialData->color.x)) {
+			}
+			ImGui::Separator();
+			// Scale
+			ImGui::DragFloat3("Scale", &transformSprite.scale.x, 0.01f, 0.1f, 10.0f);
+			// Rotation
+			if (ImGui::DragFloat3("Rotation", &transformSprite.rotate.x, 0.03f, -10.0f, 10.0f)) {
+			}
+			// Translation
+			ImGui::DragFloat3("Position", &transformSprite.translate.x, 1.0f, 0.0f, 640.0f);
+			// Reset button
+			if (ImGui::Button("Reset Transform")) {
+				transformSprite.scale = { 1.0f, 1.0f, 1.0f };
+				transformSprite.rotate = { 0.0f, 0.0f, 0.0f };
+				transformSprite.translate = { 0.0f, 0.0f, 0.0f };
+			}
+			ImGui::Separator();
+			// UV Transform
+			ImGui::DragFloat2("UVTranslate", &uvTransformSprite.translate.x, 0.01f, -10.0f, 10.0f);
+			ImGui::DragFloat2("UVScale", &uvTransformSprite.scale.x, 0.01f, -10.0f, 10.0f);
+			ImGui::SliderAngle("UVRotate", &uvTransformSprite.rotate.z);
+			ImGui::End();
 
 			//ImGui::Begin("Triangle Editor");
 			//ImGui::Text("Color RGB (Shared)");
@@ -1585,7 +1636,6 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 				directionalLightData->intensity = 1.0f;
 			}
 			ImGui::End();
-
 
 			ImGui::Render();
 #endif
