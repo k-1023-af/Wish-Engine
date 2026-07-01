@@ -411,11 +411,11 @@ WorldTransform cameraTransform = {
 	{ 0.0f, 0.0f, -5.0f } // translate (move camera back along z-axis)
 };
 
-//WorldTransform uvTransform = { 
-//	{ 1.0f, 1.0f, 1.0f }, // scale
-//	{ 0.0f, 0.0f, 0.0f }, // rotate
-//	{ 0.0f, 0.0f, 0.0f }  // translate
-//};
+WorldTransform uvTransformSprite = { 
+	{ 1.0f, 1.0f, 1.0f }, // scale
+	{ 0.0f, 0.0f, 0.0f }, // rotate
+	{ 0.0f, 0.0f, 0.0f }  // translate
+};
 
 // Forward declarations to fix C3861: 'ConvertString' identifier not found
 std::wstring ConvertString(const std::string& str);
@@ -1290,19 +1290,19 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	vertexData[2].normal.y = vertexData[2].position.y;
 	vertexData[2].normal.z = vertexData[2].position.z;
 
-	vertexData[3].position = { -0.5f, -0.5f, 0.5f, 1.0f };
+	vertexData[3].position = { -0.5f, -0.5f, 0.5f, 1.0f }; //same as vertexData[0] but different z value
 	vertexData[3].texcoord = { 0.0f, 1.0f };
 	vertexData[3].normal.x = vertexData[3].position.x;
 	vertexData[3].normal.y = vertexData[3].position.y;
 	vertexData[3].normal.z = vertexData[3].position.z;
 
-	vertexData[4].position = { 0.0f, 0.0f, 0.0f, 1.0f };
+	vertexData[4].position = { 0.0f, 0.0f, 0.0f, 1.0f }; //same as vertexData[1] but different y value
 	vertexData[4].texcoord = { 0.5f, 0.0f };
 	vertexData[4].normal.x = vertexData[4].position.x;
 	vertexData[4].normal.y = vertexData[4].position.y;
 	vertexData[4].normal.z = vertexData[4].position.z;
 
-	vertexData[5].position = { 0.5f, -0.5f, -0.5f, 1.0f };
+	vertexData[5].position = { 0.5f, -0.5f, -0.5f, 1.0f }; //same as vertexData[2] but different z value
 	vertexData[5].texcoord = { 1.0f, 1.0f };
 	vertexData[5].normal.x = vertexData[5].position.x;
 	vertexData[5].normal.y = vertexData[5].position.y;
@@ -1336,27 +1336,39 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	vertexResourceSprite->Map(0, nullptr, reinterpret_cast<void**>(&vertexDataSprite));
 	vertexDataSprite[0].position = { 0.0f, 360.0f, 0.0f, 1.0f };
 	vertexDataSprite[0].texcoord = { 0.0f, 1.0f };
-	vertexDataSprite[0].normal = { 0.0f, 0.0f, -1.0f };
+	vertexDataSprite[0].normal.x = vertexDataSprite[0].position.x;
+	vertexDataSprite[0].normal.y = vertexDataSprite[0].position.y;
+	vertexDataSprite[0].normal.z = vertexDataSprite[0].position.z;
 
 	vertexDataSprite[1].position = { 0.0f, 0.0f, 0.0f, 1.0f };
 	vertexDataSprite[1].texcoord = { 0.0f, 0.0f };
-	vertexDataSprite[1].normal = { 0.0f, 0.0f, -1.0f };
+	vertexDataSprite[1].normal.x = vertexDataSprite[1].position.x;
+	vertexDataSprite[1].normal.y = vertexDataSprite[1].position.y;
+	vertexDataSprite[1].normal.z = vertexDataSprite[1].position.z;
 
 	vertexDataSprite[2].position = { 640.0f, 360.0f, 0.0f, 1.0f };
 	vertexDataSprite[2].texcoord = { 1.0f, 1.0f };
-	vertexDataSprite[2].normal = { 0.0f, 0.0f, -1.0f };
-	
+	vertexDataSprite[2].normal.x = vertexDataSprite[2].position.x;
+	vertexDataSprite[2].normal.y = vertexDataSprite[2].position.y;
+	vertexDataSprite[2].normal.z = vertexDataSprite[2].position.z;
+
 	vertexDataSprite[3].position = { 0.0f, 0.0f, 0.0f, 1.0f };
 	vertexDataSprite[3].texcoord = { 0.0f, 0.0f };
-	vertexDataSprite[3].normal = { 0.0f, 0.0f, -1.0f };
+	vertexDataSprite[3].normal.x = vertexDataSprite[3].position.x;
+	vertexDataSprite[3].normal.y = vertexDataSprite[3].position.y;
+	vertexDataSprite[3].normal.z = vertexDataSprite[3].position.z;
 
 	vertexDataSprite[4].position = { 640.0f, 0.0f, 0.0f, 1.0f };
 	vertexDataSprite[4].texcoord = { 1.0f, 0.0f };
-	vertexDataSprite[4].normal = { 0.0f, 0.0f, -1.0f };
+	vertexDataSprite[4].normal.x = vertexDataSprite[4].position.x;
+	vertexDataSprite[4].normal.y = vertexDataSprite[4].position.y;
+	vertexDataSprite[4].normal.z = vertexDataSprite[4].position.z;
 
 	vertexDataSprite[5].position = { 640.0f, 360.0f, 0.0f, 1.0f };
 	vertexDataSprite[5].texcoord = { 1.0f, 1.0f };
-	vertexDataSprite[5].normal = { 0.0f, 0.0f, -1.0f };
+	vertexDataSprite[5].normal.x = vertexDataSprite[5].position.x;
+	vertexDataSprite[5].normal.y = vertexDataSprite[5].position.y;
+	vertexDataSprite[5].normal.z = vertexDataSprite[5].position.z;
 
 	////transform 
 	ID3D12Resource* transformationMatrixResourceSprite = CreateBufferResource(device, sizeof(TransformationMatrix));
@@ -1547,10 +1559,35 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			sphereTransformData->World = worldSphereMatrix;
 			
 			//UV Transform
-			Matrix4x4 uvTransformMatrix = MakeIdentity4x4(uvTransformSprite.scale);
-			uvTransformMatrix = Multiply(uvTransformMatrix, MakeRotateZMatrix(uvTransformSprite.rotate.z));
-			uvTransformMatrix = Multiply(uvTransformMatrix, MakeTranslateMatrix(uvTransformSprite.translate));
-			materialDataSprite->uvTransform = uvTransformMatrix;
+			
+			//Matrix4x4 uvTransformMatrix = MakeIdentity4x4(uvTransformSprite.scale);
+			//uvTransformMatrix = Multiply(uvTransformMatrix, MakeRotateZMatrix(uvTransformSprite.rotate.z));
+			//uvTransformMatrix = Multiply(uvTransformMatrix, MakeTranslateMatrix(uvTransformSprite.translate));
+			//materialDataSprite->uvTransform = uvTransformMatrix;
+
+			// Proper order for UV transform (Scale -> Rotate -> Translate)
+			// Because in the pixel shader you do: transformedUV = texcoord * uvTransformMatrix
+			Matrix4x4 uvTransformMatrix;
+			MakeIdentity4x4(uvTransformMatrix);  // Start with identity
+
+			// Scale first
+			Matrix4x4 scaleMat;
+			MakeIdentity4x4(scaleMat);
+			scaleMat.m[0][0] = uvTransformSprite.scale.x;
+			scaleMat.m[1][1] = uvTransformSprite.scale.y;
+			uvTransformMatrix = Multiply(scaleMat, uvTransformMatrix);
+
+			// Then Rotate Z
+			if (uvTransformSprite.rotate.z != 0.0f) {
+				Matrix4x4 rotMat = MakeRotateZMatrix(uvTransformSprite.rotate.z);
+				uvTransformMatrix = Multiply(rotMat, uvTransformMatrix);
+			}
+
+			// Then Translate
+			Matrix4x4 transMat = MakeTranslateMatrix({ uvTransformSprite.translate.x, uvTransformSprite.translate.y, 0.0f });
+			uvTransformMatrix = Multiply(transMat, uvTransformMatrix);
+
+			materialSpriteData->uvTransform = uvTransformMatrix;
 
 
 #ifdef USE_IMGUI
@@ -1685,11 +1722,11 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 			commandList->SetGraphicsRootDescriptorTable(2, textureSrvHandleGPU); //switch textureHandle before drawinng Sprite
 
-			//// 3. Draw Sprite - Orthographic (2D overlay)
-			//commandList->SetGraphicsRootConstantBufferView(0, transformationMatrixResourceSprite->GetGPUVirtualAddress());
-			//commandList->IASetVertexBuffers(0, 1, &vertexBufferViewSprite);
-			//commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-			//commandList->DrawInstanced(6, 1, 0, 0);  
+			// 3. Draw Sprite - Orthographic (2D overlay)
+			commandList->SetGraphicsRootConstantBufferView(0, transformationMatrixResourceSprite->GetGPUVirtualAddress());
+			commandList->IASetVertexBuffers(0, 1, &vertexBufferViewSprite);
+			commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+			commandList->DrawInstanced(6, 1, 0, 0);  
 
 			//// 4. when drawing Sprite
 			commandList->IASetIndexBuffer(&indexBufferViewSprite);
