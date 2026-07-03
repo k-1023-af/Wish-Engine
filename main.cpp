@@ -1581,12 +1581,6 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			
 			//UV Transform
 		
-			//Matrix4x4 uvTransformMatrix = MakeScaleMatrix(uvTransformSprite.scale);
-			//
-			//uvTransformMatrix = Multiply(uvTransformMatrix, MakeRotateZMatrix(uvTransformSprite.rotate.z));
-			//uvTransformMatrix = Multiply(uvTransformMatrix, MakeTranslateMatrix(uvTransformSprite.translate));
-			//
-			//materialSpriteData->uvTransform = uvTransformMatrix;
 			materialSpriteData->uvTransform = MakeUVTransformMatrix(uvTransformSprite);
 
 #ifdef USE_IMGUI
