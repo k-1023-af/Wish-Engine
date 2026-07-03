@@ -82,6 +82,7 @@ struct VertexData {
 struct Material {
 	Vector4 color;
 	int32_t enableLighting;
+	float padding[3];
 	Matrix4x4 uvTransform;
 };
 
@@ -98,6 +99,14 @@ Matrix4x4 MakeIdentity4x4(Matrix4x4& matrix) {
 		}
 	}
 	return matrix;
+}
+
+Matrix4x4 MakeScaleMatrix(Vector3 scale) {
+	Matrix4x4 result = MakeIdentity4x4(result);
+	result.m[0][0] = scale.x;
+	result.m[1][1] = scale.y;
+	result.m[2][2] = scale.z;
+	return result;
 }
 
 Matrix4x4 Multiply(Matrix4x4 a, Matrix4x4 b) {
@@ -243,6 +252,18 @@ Matrix4x4 MakeTranslateMatrix(Vector3 translate) {
 	result.m[3][2] = translate.z;
 	result.m[3][3] = 1;
 	return result;
+}
+
+Matrix4x4 MakeUVTransformMatrix(const WorldTransform& uv) {
+	
+	Matrix4x4 scaleMatrix = MakeScaleMatrix(uv.scale);
+	//Matrix4x4 rotateXMatrix = MakeRotateXMatrix(uv.rotate.x);
+	//Matrix4x4 rotateYMatrix = MakeRotateYMatrix(uv.rotate.y);
+	Matrix4x4 rotateZMatrix = MakeRotateZMatrix(uv.rotate.z);
+	//Matrix4x4 rotationMatrix = Multiply(Multiply(rotateXMatrix, rotateYMatrix), rotateZMatrix);
+	Matrix4x4 translateMatrix = MakeTranslateMatrix(uv.translate);
+	Matrix4x4 uvTransform = Multiply(Multiply(scaleMatrix, rotateZMatrix), translateMatrix);
+	return uvTransform;
 }
 
 Matrix4x4 MakePerspectiveFovMatrix(float fovY, float aspectRatio, float nearClip, float farClip) {
@@ -414,7 +435,7 @@ WorldTransform cameraTransform = {
 WorldTransform uvTransformSprite = { 
 	{ 1.0f, 1.0f, 1.0f }, // scale
 	{ 0.0f, 0.0f, 0.0f }, // rotate
-	{ 0.0f, 0.0f, 0.0f }  // translate
+	{ 0.0f, 0.0f, 0.0f },  // translate
 };
 
 // Forward declarations to fix C3861: 'ConvertString' identifier not found
@@ -1121,11 +1142,11 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	materialResourceSprite->Map(0, nullptr, reinterpret_cast<void**>(&materialSpriteData));
 	materialSpriteData->color = { 1.0f, 1.0f, 1.0f, 1.0f }; //Lighting color
 	materialSpriteData->enableLighting = false;
-	materialSpriteData->uvTransform = {
-		 1.0f, 0.0f, 0.0f,
-		 0.0f, 1.0f, 0.0f,
-		 0.0f, 0.0f, 1.0f 
-	};
+	//materialSpriteData->uvTransform = {
+	//	 1.0f, 1.0f, 1.0f,
+	//	 0.0f, 0.0f, 0.0f,
+	//	 0.0f, 0.0f, 0.0f 
+	//};
 
 	//Directional light values
 	ID3D12Resource* materialResourceLight = CreateBufferResource(device, sizeof(Material));
@@ -1559,36 +1580,14 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			sphereTransformData->World = worldSphereMatrix;
 			
 			//UV Transform
-			
-			//Matrix4x4 uvTransformMatrix = MakeIdentity4x4(uvTransformSprite.scale);
+		
+			//Matrix4x4 uvTransformMatrix = MakeScaleMatrix(uvTransformSprite.scale);
+			//
 			//uvTransformMatrix = Multiply(uvTransformMatrix, MakeRotateZMatrix(uvTransformSprite.rotate.z));
 			//uvTransformMatrix = Multiply(uvTransformMatrix, MakeTranslateMatrix(uvTransformSprite.translate));
-			//materialDataSprite->uvTransform = uvTransformMatrix;
-
-			// Proper order for UV transform (Scale -> Rotate -> Translate)
-			// Because in the pixel shader you do: transformedUV = texcoord * uvTransformMatrix
-			Matrix4x4 uvTransformMatrix;
-			MakeIdentity4x4(uvTransformMatrix);  // Start with identity
-
-			// Scale first
-			Matrix4x4 scaleMat;
-			MakeIdentity4x4(scaleMat);
-			scaleMat.m[0][0] = uvTransformSprite.scale.x;
-			scaleMat.m[1][1] = uvTransformSprite.scale.y;
-			uvTransformMatrix = Multiply(scaleMat, uvTransformMatrix);
-
-			// Then Rotate Z
-			if (uvTransformSprite.rotate.z != 0.0f) {
-				Matrix4x4 rotMat = MakeRotateZMatrix(uvTransformSprite.rotate.z);
-				uvTransformMatrix = Multiply(rotMat, uvTransformMatrix);
-			}
-
-			// Then Translate
-			Matrix4x4 transMat = MakeTranslateMatrix({ uvTransformSprite.translate.x, uvTransformSprite.translate.y, 0.0f });
-			uvTransformMatrix = Multiply(transMat, uvTransformMatrix);
-
-			materialSpriteData->uvTransform = uvTransformMatrix;
-
+			//
+			//materialSpriteData->uvTransform = uvTransformMatrix;
+			materialSpriteData->uvTransform = MakeUVTransformMatrix(uvTransformSprite);
 
 #ifdef USE_IMGUI
 			//ImGui::ShowDemoWindow();
@@ -1612,10 +1611,16 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 				transformSprite.translate = { 0.0f, 0.0f, 0.0f };
 			}
 			ImGui::Separator();
+			ImGui::Text("UV Transform (Shared)"); 
 			// UV Transform
 			ImGui::DragFloat2("UVTranslate", &uvTransformSprite.translate.x, 0.01f, -10.0f, 10.0f);
 			ImGui::DragFloat2("UVScale", &uvTransformSprite.scale.x, 0.01f, -10.0f, 10.0f);
 			ImGui::SliderAngle("UVRotate", &uvTransformSprite.rotate.z);
+			if (ImGui::Button("Reset UV Transform")) {
+				uvTransformSprite.scale = { 1.0f, 1.0f, 1.0f };
+				uvTransformSprite.rotate = { 0.0f, 0.0f, 0.0f };
+				uvTransformSprite.translate = { 0.0f, 0.0f, 0.0f };
+			}
 			ImGui::End();
 
 			//ImGui::Begin("Triangle Editor");
