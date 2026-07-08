@@ -74,11 +74,6 @@ struct DirectionalLight {
 	float intensity;
 };
 
-struct ModelData {
-	std::vector<VertexData> vertices;
-	MaterialData material;
-};
-
 struct MaterialData {
 	std::string textureFilePath;
 };
@@ -94,6 +89,11 @@ struct Material {
 	int32_t enableLighting;
 	float padding[3];
 	Matrix4x4 uvTransform;
+};
+
+struct ModelData {
+	std::vector<VertexData> vertices;
+	MaterialData material;
 };
 
 struct SphereMesh {
@@ -140,6 +140,8 @@ ModelData LoadObjFile(const std::string& directoryPath, const std::string& filen
 		}
 		else if (identifier == "f") {
 			//Triangle only (use something else for other shapes)
+			VertexData triangle[3];
+			
 			for (int32_t faceVertex = 0; faceVertex < 3; ++faceVertex) {
 				std::string vertexDefinition;
 				s >> vertexDefinition;
@@ -153,15 +155,57 @@ ModelData LoadObjFile(const std::string& directoryPath, const std::string& filen
 				}
 				// Load vertices, normals, texture coordinates, and material data from the OBJ file
 				Vector4 position = positions[elementIndices[0] - 1];
+				position.x *= -1.0f;
 				Vector2 texcoord = texcoords[elementIndices[1] - 1];
+				texcoord.y = 1.0f - texcoord.y; /// Draw texture upside down
 				Vector3 normal = normals[elementIndices[2] - 1];
+				normal.x *= -1.0f;
 				VertexData vertex = { position, texcoord, normal };
 				modelData.vertices.push_back(vertex);
+				triangle[faceVertex] = { position, texcoord, normal };
 			}
+			modelData.vertices.push_back(triangle[2]);
+			modelData.vertices.push_back(triangle[1]);
+			modelData.vertices.push_back(triangle[0]);
 		}
 	}
 	//4.ModelDataを返す
 	return modelData;
+}
+
+MaterialData LoadMaterialTemplateFile(const std::string& directoryPath, const std::string& filename) {
+	
+	//1.中で必要となる変数の宣言
+	ModelData modelData;
+	MaterialData materialData;
+	std::string line;
+
+	//2.ファイルを開く
+	std::ifstream file(directoryPath + "/" + filename);
+	assert(file.is_open());
+
+	//3.実際にファイルを読み、ModelDataを構築していく
+	while (std::getline(file, line)) {
+		std::string identifier;
+		std::istringstream s(line);
+		s >> identifier;
+
+		if (identifier == "map_Kd") {
+			std::string textureFilename;
+			s >> textureFilename;
+
+			materialData.textureFilePath = directoryPath + "/" + textureFilename;
+		}
+		else if (identifier == "mtllib") {
+			std::string materialFilename;
+			s >> materialFilename;
+
+			modelData.material = LoadMaterialTemplateFile(directoryPath, materialFilename);
+		}
+	}
+
+	//4.ModelDataを返す
+	return materialData;
 }
 
 Matrix4x4 MakeIdentity4x4(Matrix4x4& matrix) {
@@ -1097,6 +1141,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	ID3D12Resource* textureResource = CreateTextureResource(device, metadata);
 
 	DirectX::ScratchImage mipImages2 = LoadTexture("Resources/monsterBall.png");
+	//DirectX::ScratchImage mipImages2 = LoadTexture(modelData.material.textureFilePath);
 	const DirectX::TexMetadata& metadata2 = mipImages2.GetMetadata();
 	ID3D12Resource* textureResource2 = CreateTextureResource(device, metadata2);
 
@@ -1352,54 +1397,56 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	vertexResourceDesc.SampleDesc.Count = 1;
 	vertexResourceDesc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
 
+	
+
 	//VertexBufferView
-	ID3D12Resource* vertexResource = CreateBufferResource(device, sizeof(VertexData) * 6);
-	vertexResource->SetName(L"vertexResource");
-	assert(SUCCEEDED(hr));
-
-	D3D12_VERTEX_BUFFER_VIEW vertexBufferView{};
-	vertexBufferView.BufferLocation = vertexResource->GetGPUVirtualAddress();
-	vertexBufferView.SizeInBytes = sizeof(VertexData) * 6;
-	vertexBufferView.StrideInBytes = sizeof(VertexData);
-
-	//Resource data overwrite
-	VertexData* vertexData = nullptr;
-	vertexResource->Map(0, nullptr, reinterpret_cast<void**>(&vertexData));
-	vertexData[0].position = { -0.5f, -0.5f, 0.0f, 1.0f };
-	vertexData[0].texcoord = { 0.0f, 1.0f };
-	vertexData[0].normal.x = vertexData[0].position.x;
-	vertexData[0].normal.y = vertexData[0].position.y;
-	vertexData[0].normal.z = vertexData[0].position.z;
-
-	vertexData[1].position = { 0.0f, 0.5f, 0.0f, 1.0f };
-	vertexData[1].texcoord = { 0.5f, 0.0f };
-	vertexData[1].normal.x = vertexData[1].position.x;
-	vertexData[1].normal.y = vertexData[1].position.y;
-	vertexData[1].normal.z = vertexData[1].position.z;
-
-	vertexData[2].position = { 0.5f, -0.5f, 0.0f, 1.0f };
-	vertexData[2].texcoord = { 1.0f, 1.0f };
-	vertexData[2].normal.x = vertexData[2].position.x;
-	vertexData[2].normal.y = vertexData[2].position.y;
-	vertexData[2].normal.z = vertexData[2].position.z;
-
-	vertexData[3].position = { -0.5f, -0.5f, 0.5f, 1.0f }; //same as vertexData[0] but different z value
-	vertexData[3].texcoord = { 0.0f, 1.0f };
-	vertexData[3].normal.x = vertexData[3].position.x;
-	vertexData[3].normal.y = vertexData[3].position.y;
-	vertexData[3].normal.z = vertexData[3].position.z;
-
-	vertexData[4].position = { 0.0f, 0.0f, 0.0f, 1.0f }; //same as vertexData[1] but different y value
-	vertexData[4].texcoord = { 0.5f, 0.0f };
-	vertexData[4].normal.x = vertexData[4].position.x;
-	vertexData[4].normal.y = vertexData[4].position.y;
-	vertexData[4].normal.z = vertexData[4].position.z;
-
-	vertexData[5].position = { 0.5f, -0.5f, -0.5f, 1.0f }; //same as vertexData[2] but different z value
-	vertexData[5].texcoord = { 1.0f, 1.0f };
-	vertexData[5].normal.x = vertexData[5].position.x;
-	vertexData[5].normal.y = vertexData[5].position.y;
-	vertexData[5].normal.z = vertexData[5].position.z;
+	//ID3D12Resource* vertexResource = CreateBufferResource(device, sizeof(VertexData) * 6);
+	//vertexResource->SetName(L"vertexResource");
+	//assert(SUCCEEDED(hr));
+	//
+	//D3D12_VERTEX_BUFFER_VIEW vertexBufferView{};
+	//vertexBufferView.BufferLocation = vertexResource->GetGPUVirtualAddress();
+	//vertexBufferView.SizeInBytes = sizeof(VertexData) * 6;
+	//vertexBufferView.StrideInBytes = sizeof(VertexData);
+	//
+	////Resource data overwrite
+	//VertexData* vertexData = nullptr;
+	//vertexResource->Map(0, nullptr, reinterpret_cast<void**>(&vertexData));
+	//vertexData[0].position = { -0.5f, -0.5f, 0.0f, 1.0f };
+	//vertexData[0].texcoord = { 0.0f, 1.0f };
+	//vertexData[0].normal.x = vertexData[0].position.x;
+	//vertexData[0].normal.y = vertexData[0].position.y;
+	//vertexData[0].normal.z = vertexData[0].position.z;
+	//
+	//vertexData[1].position = { 0.0f, 0.5f, 0.0f, 1.0f };
+	//vertexData[1].texcoord = { 0.5f, 0.0f };
+	//vertexData[1].normal.x = vertexData[1].position.x;
+	//vertexData[1].normal.y = vertexData[1].position.y;
+	//vertexData[1].normal.z = vertexData[1].position.z;
+	//
+	//vertexData[2].position = { 0.5f, -0.5f, 0.0f, 1.0f };
+	//vertexData[2].texcoord = { 1.0f, 1.0f };
+	//vertexData[2].normal.x = vertexData[2].position.x;
+	//vertexData[2].normal.y = vertexData[2].position.y;
+	//vertexData[2].normal.z = vertexData[2].position.z;
+	//
+	//vertexData[3].position = { -0.5f, -0.5f, 0.5f, 1.0f }; //same as vertexData[0] but different z value
+	//vertexData[3].texcoord = { 0.0f, 1.0f };
+	//vertexData[3].normal.x = vertexData[3].position.x;
+	//vertexData[3].normal.y = vertexData[3].position.y;
+	//vertexData[3].normal.z = vertexData[3].position.z;
+	//
+	//vertexData[4].position = { 0.0f, 0.0f, 0.0f, 1.0f }; //same as vertexData[1] but different y value
+	//vertexData[4].texcoord = { 0.5f, 0.0f };
+	//vertexData[4].normal.x = vertexData[4].position.x;
+	//vertexData[4].normal.y = vertexData[4].position.y;
+	//vertexData[4].normal.z = vertexData[4].position.z;
+	//
+	//vertexData[5].position = { 0.5f, -0.5f, -0.5f, 1.0f }; //same as vertexData[2] but different z value
+	//vertexData[5].texcoord = { 1.0f, 1.0f };
+	//vertexData[5].normal.x = vertexData[5].position.x;
+	//vertexData[5].normal.y = vertexData[5].position.y;
+	//vertexData[5].normal.z = vertexData[5].position.z;
 
 	//Viewport and Scissor
 	D3D12_VIEWPORT viewport{};
@@ -1472,36 +1519,31 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 	WorldTransform transformSprite{ { 1.0f, 1.0f, 1.0f}, { 0.0f, 0.0f, 0.0f }, {0.0f, 0.0f, 0.0f} };
 
-	//------------------cube start
+	//-------------------Make model data *start*
 
-	WorldTransform transformSphere{ { 1.0f, 1.0f, 1.0f}, { 0.0f, 0.0f, 0.0f }, {0.0f, 0.0f, 1.0f} };
+	WorldTransform transformModel{ { 1.0f, 1.0f, 1.0f}, { 0.0f, 0.0f, 0.0f }, {0.0f, 0.0f, 5.0f} };
 
-	SphereMesh sphere = DrawSphere(16, 1);
+	//SphereMesh sphere = DrawSphere(16, 1);
 
-	// Create dedicated vertex buffer for sphere
-	ID3D12Resource* sphereVertexResource = CreateBufferResource(
-		device, sizeof(VertexData) * sphere.vertices.size()
-	);
-	sphereVertexResource->SetName(L"sphereVertexResource");
+	ModelData modelData = LoadObjFile("resources", "axis.obj");
+	ID3D12Resource* modelVertexResource = CreateBufferResource(device, sizeof(VertexData) * modelData.vertices.size());
+	D3D12_VERTEX_BUFFER_VIEW modelVertexBufferView{};
+	modelVertexBufferView.BufferLocation = modelVertexResource->GetGPUVirtualAddress();
+	modelVertexBufferView.SizeInBytes = UINT(sizeof(VertexData) * modelData.vertices.size());
+	modelVertexBufferView.StrideInBytes = sizeof(VertexData);
 
-	D3D12_VERTEX_BUFFER_VIEW sphereVertexBufferView{};
-	sphereVertexBufferView.BufferLocation = sphereVertexResource->GetGPUVirtualAddress();
-	sphereVertexBufferView.SizeInBytes = sizeof(VertexData) * (UINT)sphere.vertices.size();
-	sphereVertexBufferView.StrideInBytes = sizeof(VertexData);
-
-	// Upload sphere vertex data
-	VertexData* sphereVertexData = nullptr;
-	sphereVertexResource->Map(0, nullptr, reinterpret_cast<void**>(&sphereVertexData));
-	std::memcpy(sphereVertexData, sphere.vertices.data(), sizeof(VertexData) * sphere.vertices.size());
-	sphereVertexResource->Unmap(0, nullptr);
+	VertexData* modelVertexData = nullptr;
+	modelVertexResource->Map(0, nullptr, reinterpret_cast<void**>(&modelVertexData));
+	std::memcpy(modelVertexData, modelData.vertices.data(), sizeof(VertexData)* modelData.vertices.size());
+	modelVertexResource->Unmap(0, nullptr);
 
 	// Create dedicated WVP constant buffer for sphere
-	ID3D12Resource* sphereWVPResource = CreateBufferResource(device, sizeof(TransformationMatrix));
-	sphereWVPResource->SetName(L"sphereWVPResource");
+	ID3D12Resource* modelWVPResource = CreateBufferResource(device, sizeof(TransformationMatrix));
+	modelWVPResource->SetName(L"modelWVPResource");
 
-	TransformationMatrix* sphereTransformData = nullptr;
-	sphereWVPResource->Map(0, nullptr, reinterpret_cast<void**>(&sphereTransformData));
-	//--------------------cube end
+	TransformationMatrix* modelTransformData = nullptr;
+	modelWVPResource->Map(0, nullptr, reinterpret_cast<void**>(&modelTransformData));
+	//-------------------Make model data *end*
 
 	//Pull Resources from Swap Chain (create rtv)
 	ID3D12Resource* swapChainResources[2] = { nullptr };
@@ -1641,15 +1683,15 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			*wvpData = worldViewProjectionMatrix;
 
 			//DrawSphere
-			transformSphere.rotate.y += 0.02f;
-			Matrix4x4 worldSphereMatrix = MakeAffineMatrix(transformSphere.scale, transformSphere.rotate, transformSphere.translate);
+			transformModel.rotate.y += 0.02f;
+			Matrix4x4 worldSphereMatrix = MakeAffineMatrix(transformModel.scale, transformModel.rotate, transformModel.translate);
 			//Matrix4x4 sphereInverseMatrix = Inverse(worldSphereMatrix);
 			Matrix4x4 sphereProjectionMatrix = MakePerspectiveFovMatrix(0.45f, float(kClientWidth) / float(kClientHeight), 0.1f, 100.0f);
 			Matrix4x4 sphereViewProjectionMatrix = Multiply(worldSphereMatrix, sphereProjectionMatrix);
 			
 			Matrix4x4 wvpMatrixSphere = Multiply(worldSphereMatrix, Multiply(viewMatrix, projectionMatrix));
-			sphereTransformData->WVP = wvpMatrixSphere;
-			sphereTransformData->World = worldSphereMatrix;
+			modelTransformData->WVP = wvpMatrixSphere;
+			modelTransformData->World = worldSphereMatrix;
 			
 			//UV Transform
 		
@@ -1658,36 +1700,36 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 #ifdef USE_IMGUI
 			//ImGui::ShowDemoWindow();
 
-			ImGui::Begin("Sprite Editor");
-			ImGui::Text("Color RGB (Shared)");
-			if (ImGui::ColorEdit3("Triangle Color", &materialData->color.x)) {
-			}
-			ImGui::Separator();
-			// Scale
-			ImGui::DragFloat3("Scale", &transformSprite.scale.x, 0.01f, 0.1f, 10.0f);
-			// Rotation
-			if (ImGui::DragFloat3("Rotation", &transformSprite.rotate.x, 0.03f, -10.0f, 10.0f)) {
-			}
-			// Translation
-			ImGui::DragFloat3("Position", &transformSprite.translate.x, 1.0f, 0.0f, 640.0f);
-			// Reset button
-			if (ImGui::Button("Reset Transform")) {
-				transformSprite.scale = { 1.0f, 1.0f, 1.0f };
-				transformSprite.rotate = { 0.0f, 0.0f, 0.0f };
-				transformSprite.translate = { 0.0f, 0.0f, 0.0f };
-			}
-			ImGui::Separator();
-			ImGui::Text("UV Transform (Shared)"); 
-			// UV Transform
-			ImGui::DragFloat2("UVTranslate", &uvTransformSprite.translate.x, 0.01f, -10.0f, 10.0f);
-			ImGui::DragFloat2("UVScale", &uvTransformSprite.scale.x, 0.01f, -10.0f, 10.0f);
-			ImGui::SliderAngle("UVRotate", &uvTransformSprite.rotate.z);
-			if (ImGui::Button("Reset UV Transform")) {
-				uvTransformSprite.scale = { 1.0f, 1.0f, 1.0f };
-				uvTransformSprite.rotate = { 0.0f, 0.0f, 0.0f };
-				uvTransformSprite.translate = { 0.0f, 0.0f, 0.0f };
-			}
-			ImGui::End();
+			//ImGui::Begin("Sprite Editor");
+			//ImGui::Text("Color RGB (Shared)");
+			//if (ImGui::ColorEdit3("Triangle Color", &materialData->color.x)) {
+			//}
+			//ImGui::Separator();
+			//// Scale
+			//ImGui::DragFloat3("Scale", &transformSprite.scale.x, 0.01f, 0.1f, 10.0f);
+			//// Rotation
+			//if (ImGui::DragFloat3("Rotation", &transformSprite.rotate.x, 0.03f, -10.0f, 10.0f)) {
+			//}
+			//// Translation
+			//ImGui::DragFloat3("Position", &transformSprite.translate.x, 1.0f, 0.0f, 640.0f);
+			//// Reset button
+			//if (ImGui::Button("Reset Transform")) {
+			//	transformSprite.scale = { 1.0f, 1.0f, 1.0f };
+			//	transformSprite.rotate = { 0.0f, 0.0f, 0.0f };
+			//	transformSprite.translate = { 0.0f, 0.0f, 0.0f };
+			//}
+			//ImGui::Separator();
+			//ImGui::Text("UV Transform (Shared)"); 
+			//// UV Transform
+			//ImGui::DragFloat2("UVTranslate", &uvTransformSprite.translate.x, 0.01f, -10.0f, 10.0f);
+			//ImGui::DragFloat2("UVScale", &uvTransformSprite.scale.x, 0.01f, -10.0f, 10.0f);
+			//ImGui::SliderAngle("UVRotate", &uvTransformSprite.rotate.z);
+			//if (ImGui::Button("Reset UV Transform")) {
+			//	uvTransformSprite.scale = { 1.0f, 1.0f, 1.0f };
+			//	uvTransformSprite.rotate = { 0.0f, 0.0f, 0.0f };
+			//	uvTransformSprite.translate = { 0.0f, 0.0f, 0.0f };
+			//}
+			//ImGui::End();
 
 			//ImGui::Begin("Triangle Editor");
 			//ImGui::Text("Color RGB (Shared)");
@@ -1709,22 +1751,69 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			//}
 			//ImGui::End();
 
-			ImGui::Begin("Sphere Editor");
+			//ImGui::Begin("Sphere Editor");
+			//ImGui::Text("Color RGB (Shared)");
+			//if (ImGui::ColorEdit3("Sphere Color", &materialSpriteData->color.x)) {}
+			//ImGui::Checkbox("useMonsterBall", &useMonsterBall);
+			//ImGui::Separator();
+			//// Scale
+			//ImGui::DragFloat3("Scale", &transformSphere.scale.x, 0.01f, 0.1f, 10.0f);
+			//// Rotation
+			//ImGui::DragFloat3("Rotation", &transformSphere.rotate.x, 0.03f, -10.0f, 10.0f);
+			//// Translation
+			//ImGui::DragFloat3("Position", &transformSphere.translate.x, 0.01f, -10.0f, 10.0f);
+			//// Reset
+			//if (ImGui::Button("Reset Sphere")) {
+			//	transformSphere.scale = { 1.0f, 1.0f, 1.0f };
+			//	transformSphere.rotate = { 0.0f, 0.0f, 0.0f };
+			//	transformSphere.translate = { 0.0f, 0.0f, 1.0f };
+			//}
+			//ImGui::Separator();
+			//ImGui::Checkbox("enableLighting", &isLight);
+			//if (isLight) {
+			//	materialSpriteData->enableLighting = 1;
+			//}
+			//else {
+			//	materialSpriteData->enableLighting = 0;
+			//}
+			//if (ImGui::ColorEdit3("LightColor", &directionalLightData->color.x)) {}
+			//ImGui::DragFloat3("LightDirection", &directionalLightData->direction.x, 0.01f, -2.0f, 2.0f);
+			//ImGui::DragFloat("Intensity", &directionalLightData->intensity, 0.01f, 0.0f, 2.0f);
+			//if (ImGui::Button("Reset Lighting")) {
+			//	materialSpriteData->color = { 1.0f, 1.0f, 1.0f, 1.0f };
+			//	directionalLightData->color = { 1.0f, 1.0f, 1.0f, 1.0f };
+			//	directionalLightData->direction = { 0.0f, -1.0f, 2.0f };
+			//	directionalLightData->intensity = 1.0f;
+			//}
+			//ImGui::End();
+
+			ImGui::Begin("Model Editor");
 			ImGui::Text("Color RGB (Shared)");
-			if (ImGui::ColorEdit3("Sphere Color", &materialSpriteData->color.x)) {}
+			if (ImGui::ColorEdit3("Texture Color", &materialSpriteData->color.x)) {}
 			ImGui::Checkbox("useMonsterBall", &useMonsterBall);
 			ImGui::Separator();
 			// Scale
-			ImGui::DragFloat3("Scale", &transformSphere.scale.x, 0.01f, 0.1f, 10.0f);
+			ImGui::DragFloat3("Scale", &transformModel.scale.x, 0.01f, 0.1f, 10.0f);
 			// Rotation
-			ImGui::DragFloat3("Rotation", &transformSphere.rotate.x, 0.03f, -10.0f, 10.0f);
+			ImGui::DragFloat3("Rotation", &transformModel.rotate.x, 0.03f, -10.0f, 10.0f);
 			// Translation
-			ImGui::DragFloat3("Position", &transformSphere.translate.x, 0.01f, -10.0f, 10.0f);
+			ImGui::DragFloat3("Position", &transformModel.translate.x, 0.01f, -10.0f, 10.0f);
 			// Reset
-			if (ImGui::Button("Reset Sphere")) {
-				transformSphere.scale = { 1.0f, 1.0f, 1.0f };
-				transformSphere.rotate = { 0.0f, 0.0f, 0.0f };
-				transformSphere.translate = { 0.0f, 0.0f, 1.0f };
+			if (ImGui::Button("Reset Transform")) {
+				transformModel.scale = { 1.0f, 1.0f, 1.0f };
+				transformModel.rotate = { 0.0f, 0.0f, 0.0f };
+				transformModel.translate = { 0.0f, 0.0f, 5.0f };
+			}
+			ImGui::Separator();
+			ImGui::Text("UV Transform (Shared)");
+			// UV Transform
+			ImGui::DragFloat2("UVTranslate", &uvTransformSprite.translate.x, 0.01f, -10.0f, 10.0f);
+			ImGui::DragFloat2("UVScale", &uvTransformSprite.scale.x, 0.01f, -10.0f, 10.0f);
+			ImGui::SliderAngle("UVRotate", &uvTransformSprite.rotate.z);
+			if (ImGui::Button("Reset UV Transform")) {
+				uvTransformSprite.scale = { 1.0f, 1.0f, 1.0f };
+				uvTransformSprite.rotate = { 0.0f, 0.0f, 0.0f };
+				uvTransformSprite.translate = { 0.0f, 0.0f, 0.0f };
 			}
 			ImGui::Separator();
 			ImGui::Checkbox("enableLighting", &isLight);
@@ -1785,24 +1874,25 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			//commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 			//commandList->DrawInstanced(6, 1, 0, 0);  
 
-			// 2. Draw Sphere - Perspective
-			commandList->SetGraphicsRootConstantBufferView(0, sphereWVPResource->GetGPUVirtualAddress()); 
-			commandList->IASetVertexBuffers(0, 1, &sphereVertexBufferView);
+			//// 2. ModelData
+			commandList->SetGraphicsRootConstantBufferView(0, modelWVPResource->GetGPUVirtualAddress());
+			commandList->IASetVertexBuffers(0, 1, &modelVertexBufferView);
 			commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-			commandList->DrawInstanced((UINT)sphere.vertices.size(), 1, 0, 0);
+			commandList->DrawInstanced(UINT(modelData.vertices.size()), 1, 0, 0);
 
 			commandList->SetGraphicsRootDescriptorTable(2, textureSrvHandleGPU); //switch textureHandle before drawinng Sprite
 
-			// 3. Draw Sprite - Orthographic (2D overlay)
-			commandList->SetGraphicsRootConstantBufferView(0, transformationMatrixResourceSprite->GetGPUVirtualAddress());
-			commandList->IASetVertexBuffers(0, 1, &vertexBufferViewSprite);
-			commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-			commandList->DrawInstanced(6, 1, 0, 0);  
+			//// 3. Draw Sprite - Orthographic (2D overlay)
+			//commandList->SetGraphicsRootConstantBufferView(0, transformationMatrixResourceSprite->GetGPUVirtualAddress());
+			//commandList->IASetVertexBuffers(0, 1, &vertexBufferViewSprite);
+			//commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+			//commandList->DrawInstanced(6, 1, 0, 0);  
 
 			//// 4. when drawing Sprite
 			commandList->IASetIndexBuffer(&indexBufferViewSprite);
 			commandList->DrawIndexedInstanced(6, 1, 0, 0, 0);
 
+			
 		#ifdef USE_IMGUI
 			ImGui_ImplDX12_RenderDrawData(ImGui::GetDrawData(), commandList);
 		#endif
@@ -1847,10 +1937,10 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	CloseHandle(fenceEvent);
 	fence->Release();
 	vertexResourceSprite->Release();
-	vertexResource->Release();
+	modelVertexResource->Release();
 	wvpResource->Release();
-	if (sphereVertexResource) sphereVertexResource->Release();
-	if (sphereWVPResource) sphereWVPResource->Release();
+	if (modelVertexResource) modelVertexResource->Release();
+	if (modelWVPResource) modelWVPResource->Release();
 	if (materialResourceLight) materialResourceLight->Release();
 	materialResource->Release();
 
