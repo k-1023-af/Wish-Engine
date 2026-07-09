@@ -371,3 +371,5 @@ git rm --cached <01_Project.vcxproj.user>
 Dumps/
 
 imgui.ini
+
+!resources/**/*.obj
