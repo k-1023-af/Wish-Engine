@@ -17,6 +17,7 @@
 #include <dxgidebug.h>
 #include <dxcapi.h>
 #include <cmath>
+#include <xaudio2.h>
 #include <wrl.h>
 #ifdef USE_IMGUI
 #include "externals/imgui/imgui.h"
@@ -24,6 +25,8 @@
 #include "externals/imgui/imgui_impl_win32.h"
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 #endif
+
+#pragma comment(lib, "xaudio2.lib")
 
 #pragma comment(lib, "dxcompiler.lib")
 
@@ -103,23 +106,23 @@ struct SphereMesh {
 
 float pi = 3.14f;
 
-class ResourceObject {
-public:
-	ResourceObject(const Microsoft::WRL::ComPtr<ID3D12Resource> resource)
-		:resource_(resource)
-	{}
-	//desctructor is called when its lifetime ends
-
-	~ResourceObject() {
-		//release here
-		if (resource_) {
-			resource_->Release();
-		}
-	}
-	Microsoft::WRL::ComPtr<ID3D12Resource> Get() { return resource_; }
-private:
-	Microsoft::WRL::ComPtr<ID3D12Resource> resource_;
-};
+//class ResourceObject {
+//public:
+//	ResourceObject(const Microsoft::WRL::ComPtr<ID3D12Resource> resource)
+//		:resource_(resource)
+//	{}
+//	//desctructor is called when its lifetime ends
+//
+//	~ResourceObject() {
+//		//release here
+//		if (resource_) {
+//			resource_->Release();
+//		}
+//	}
+//	Microsoft::WRL::ComPtr<ID3D12Resource> Get() { return resource_; }
+//private:
+//	Microsoft::WRL::ComPtr<ID3D12Resource> resource_;
+//};
 
 ModelData LoadObjFile(const std::string& directoryPath, const std::string& filename) {
 
@@ -894,13 +897,13 @@ Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> CreateDescriptorHeap(
 }
 
 [[nodiscard]]
-ID3D12Resource* UploadTextureData(ID3D12Resource* texture, const DirectX::ScratchImage& mipImages, ID3D12Device* device, ID3D12GraphicsCommandList* commandList) {
+Microsoft::WRL::ComPtr <ID3D12Resource> UploadTextureData(ID3D12Resource* texture, const DirectX::ScratchImage& mipImages, ID3D12Device* device, ID3D12GraphicsCommandList* commandList) {
 	std::vector<D3D12_SUBRESOURCE_DATA> subresources;
 	DirectX::PrepareUpload(device, mipImages.GetImages(), mipImages.GetImageCount(), mipImages.GetMetadata(), subresources);
 	uint64_t intermediateSize = GetRequiredIntermediateSize(texture, 0, UINT(subresources.size()));
 	Microsoft::WRL::ComPtr<ID3D12Resource> intermediateResource = CreateBufferResource(device, intermediateSize);
 	intermediateResource->SetName(L"intermediateResource");
-	UpdateSubresources(commandList, texture, intermediateResource, 0, 0, UINT(subresources.size()), subresources.data());
+	UpdateSubresources(commandList, texture, intermediateResource.Get(), 0, 0, UINT(subresources.size()), subresources.data());
 
 	D3D12_RESOURCE_BARRIER barrier = {};
 	barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
@@ -1012,6 +1015,13 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	SetUnhandledExceptionFilter(ExportDump);
 
 	CoInitializeEx(0, COINIT_MULTITHREADED);
+
+	ComPtr<IXAudio2> xAudio2;
+	IXAudio2MasteringVoice* masterVoice;
+
+	result = XAudio2Create(&xAudio2, 0, XAUDIO2_DEFAULT_PROCESSOR);
+
+	result = xAudio2->CreateMasteringVoice(&masterVoice);
 
 	//Debug Layer
 #ifdef _DEBUG
@@ -1285,7 +1295,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	//};
 
 	//Directional light values
-	Microsoft::WRL::ComPtr<ID3D12Resource> materialResourceLight = CreateBufferResource(device, sizeof(Material));
+	Microsoft::WRL::ComPtr<ID3D12Resource> materialResourceLight = CreateBufferResource(device, sizeof(DirectionalLight));
 	materialResourceLight->SetName(L"materialResourceLight");
 	DirectionalLight* directionalLightData = nullptr;
 	materialResourceLight->Map(0, nullptr, reinterpret_cast<void**>(&directionalLightData));
@@ -1895,6 +1905,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 			//// 2. ModelData
 			commandList->SetGraphicsRootConstantBufferView(0, modelWVPResource->GetGPUVirtualAddress());
+			
 			commandList->IASetVertexBuffers(0, 1, &modelVertexBufferView);
 			commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 			commandList->DrawInstanced(UINT(modelData.vertices.size()), 1, 0, 0);
@@ -1954,44 +1965,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	
 	//Close Handle / Close Window
 	CloseHandle(fenceEvent);
-	//fence->Release();
-	//vertexResourceSprite->Release();
-	//modelVertexResource->Release();
-	//wvpResource->Release();
-	//if (modelVertexResource) modelVertexResource->Release();
-	//if (modelWVPResource) modelWVPResource->Release();
-	//if (materialResourceLight) materialResourceLight->Release();
-	//materialResource->Release();
-	//
-	//graphicsPipelineState->Release();
-	//rootSignature->Release();
-	//
-	//if (errorBlob) errorBlob->Release();
-	//signatureBlob->Release();
-	//
-	//pixelShaderBlob->Release();
-	//vertexShaderBlob->Release();
-	//
-	//textureResource->Release();
-	//if (intermediateResource2) intermediateResource2->Release();
-	//intermediateResource->Release(); 
-	//
-	//depthStencilResource->Release();
-	//dsvDescriptorHeap->Release();
-	//
-	//srvDescriptorHeap->Release();
-	//rtvDescriptorHeap->Release();
-	//swapChainResources[0]->Release();
-	//swapChainResources[1]->Release();
-	//swapChain->Release();
-	//
-	//commandList->Release();
-	//commandAllocator->Release();
-	//commandQueue->Release();
-	//
-	//device->Release();
-	//useAdapter->Release();
-	//dxgiFactory->Release();
+
 
 #ifdef _DEBUG
 	//debugController->Release();
