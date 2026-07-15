@@ -18,6 +18,8 @@
 #include <dxcapi.h>
 #include <cmath>
 #include <xaudio2.h>
+#define DIRECTINPUT_VERSION	0x800
+#include <dinput.h>
 #include <wrl.h>
 #ifdef USE_IMGUI
 #include "externals/imgui/imgui.h"
@@ -37,6 +39,9 @@ extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg
 #pragma comment(lib, "dxgi.lib")
 
 #pragma comment(lib, "DirectXTex.lib")
+
+#pragma comment(lib, "dinput8.lib")
+#pragma comment(lib, "dxguid.lib")
 
 const int32_t kClientWidth = 1280;
 const int32_t kClientHeight = 720;
@@ -252,8 +257,7 @@ MaterialData LoadMaterialTemplateFile(const std::string& directoryPath, const st
 }
 
 SoundData SoundLoadWave(const char* filename) {
-	//HRESULT hr;
-
+	
 	//1. File open
 	std::ifstream file;
 
@@ -266,33 +270,30 @@ SoundData SoundLoadWave(const char* filename) {
 	file.read((char*)&riff, sizeof(riff));
 
 	if (strncmp(riff.chunk.id, "RIFF", 4) != 0) {
-		assert(0);
+		assert(0 && "Not a valid Wave file");
 	}
-
 	if (strncmp(riff.type, "WAVE", 4) != 0) {
-		assert(0);
+		assert(0 && "Not a valid Wave file");
 	}
 
 	FormatChunk format = {};
-
-	file.read((char*)&format, sizeof(ChunkHeader));
-	if (strncmp(format.chunk.id, "fmt", 4) != 0) {
-		assert(0);
+	ChunkHeader data = {};
+	while (file.read((char*)&data, sizeof(ChunkHeader))) {
+		if (strncmp(data.id, "fmt", 3) == 0) {  // "fmt "
+			format.chunk = data;
+			assert(format.chunk.size <= sizeof(format.fmt));
+			file.read((char*)&format.fmt, format.chunk.size);
+		}
+		else if (strncmp(data.id, "data", 4) == 0) {
+			break;  // Found data chunk
+		}
+		else {
+			// Skip unknown chunk
+			file.seekg(data.size, std::ios_base::cur);
+		}
 	}
-
-	assert(format.chunk.size <= sizeof(format.fmt));
-	file.read((char*)&format.fmt, format.chunk.size);
-
-	ChunkHeader data;
-	file.read((char*)&data, sizeof(data));
-
-	if (strncmp(data.id, "JUNK", 4) == 0) {
-		file.seekg(data.size, std::ios_base::cur);
-		file.read((char*)&data, sizeof(data));
-	}
-
 	if (strncmp(data.id, "data", 4) != 0) {
-		assert(0);
+		assert(0 && "data chunk not found");
 	}
 
 	char* pBuffer = new char[data.size];
@@ -1252,6 +1253,22 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 #endif
 
+	////////DirectX Initialize process
+
+	IDirectInput8* directInput = nullptr;
+	hr = DirectInput8Create(wc.hInstance, DIRECTINPUT_VERSION, IID_IDirectInput8, (void**)&directInput, nullptr);
+	assert(SUCCEEDED(hr));
+
+	IDirectInputDevice8* keyboard = nullptr;
+	hr = directInput->CreateDevice(GUID_SysKeyboard, &keyboard, NULL);
+	assert(SUCCEEDED(hr));
+
+	hr = keyboard->SetDataFormat(&c_dfDIKeyboard);
+	assert(SUCCEEDED(hr));
+
+	hr = keyboard->SetCooperativeLevel(hwnd, DISCL_FOREGROUND | DISCL_NONEXCLUSIVE | DISCL_NOWINKEY);
+	assert(SUCCEEDED(hr));
+
 	//dxCompiler initialization (Before main loop)
 	IDxcUtils* dxcUtils = nullptr;
 	IDxcCompiler3* dxcCompiler = nullptr;
@@ -1844,6 +1861,20 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 			//if (Input::GetInstance()->TriggerKey(DIK_SPACE))
 			SoundPlayWave(xAudio2.Get(), soundData1);
+
+			keyboard->Acquire();
+			BYTE key[256] = {};
+			keyboard->GetDeviceState(sizeof(key), key);
+
+			if (key[DIK_0]) {
+				OutputDebugStringA("Hit 0\n");
+			}
+
+			//key input (Trigger) process
+			//bool is the key being pressed? (uint8_t [key #]
+			//bool the moment a key is pressed (uint8_t [key #]
+			//prevents negative values and limitted to [0 - 255]
+
 
 
 #ifdef USE_IMGUI
