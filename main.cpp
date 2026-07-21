@@ -18,7 +18,8 @@
 #include <dxcapi.h>
 #include <cmath>
 #include <xaudio2.h>
-#define DIRECTINPUT_VERSION	0x800
+#include "DebugCamera.h"
+//#define DIRECTINPUT_VERSION	0x800
 #include <dinput.h>
 #include <wrl.h>
 #ifdef USE_IMGUI
@@ -132,23 +133,8 @@ struct SphereMesh {
 
 float pi = 3.14f;
 
-//class ResourceObject {
-//public:
-//	ResourceObject(const Microsoft::WRL::ComPtr<ID3D12Resource> resource)
-//		:resource_(resource)
-//	{}
-//	//desctructor is called when its lifetime ends
-//
-//	~ResourceObject() {
-//		//release here
-//		if (resource_) {
-//			resource_->Release();
-//		}
-//	}
-//	Microsoft::WRL::ComPtr<ID3D12Resource> Get() { return resource_; }
-//private:
-//	Microsoft::WRL::ComPtr<ID3D12Resource> resource_;
-//};
+bool useDebugCamera = false;
+
 
 ModelData LoadObjFile(const std::string& directoryPath, const std::string& filename) {
 
@@ -687,6 +673,27 @@ WorldTransform uvTransformSprite = {
 	{ 0.0f, 0.0f, 0.0f },  // translate
 };
 
+//LPDIRECTINPUT8 gDirectInput = nullptr;
+//LPDIRECTINPUTDEVICE8 gKeyboard = nullptr;
+//LPDIRECTINPUTDEVICE8 gMouse = nullptr;
+BYTE gKeys[256] = {};
+DIMOUSESTATE gMouseState = {};
+//
+//void InitializeInput(HWND hwnd) {
+//	DirectInput8Create(GetModuleHandle(nullptr), DIRECTINPUT_VERSION, IID_IDirectInput8, (void**)&gDirectInput, nullptr);
+//
+//	// Keyboard
+//	gDirectInput->CreateDevice(GUID_SysKeyboard, &gKeyboard, nullptr);
+//	gKeyboard->SetDataFormat(&c_dfDIKeyboard);
+//	gKeyboard->SetCooperativeLevel(hwnd, DISCL_FOREGROUND | DISCL_NONEXCLUSIVE);
+//
+//	// Mouse
+//	gDirectInput->CreateDevice(GUID_SysMouse, &gMouse, nullptr);
+//	gMouse->SetDataFormat(&c_dfDIMouse);
+//	gMouse->SetCooperativeLevel(hwnd, DISCL_FOREGROUND | DISCL_EXCLUSIVE);
+//}
+
+
 // Forward declarations to fix C3861: 'ConvertString' identifier not found
 std::wstring ConvertString(const std::string& str);
 std::string ConvertString(const std::wstring& str);
@@ -1138,6 +1145,9 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 	SoundData soundData1 = SoundLoadWave("Resources/Alarm01.wav");
 
+	DebugCamera debugCamera;
+	debugCamera.Initialize();
+
 	///------SOUND DATA END----------
 
 	//Debug Layer
@@ -1184,6 +1194,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 	//ウインドウの表示する
 	ShowWindow(hwnd, SW_SHOW);
+	//ShowCursor(TRUE);
 
 	Microsoft::WRL::ComPtr<IDXGIFactory7> dxgiFactory = nullptr;
 	//HRESULTはWindows系のエラーコードであり、
@@ -1255,19 +1266,32 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 	////////DirectX Initialize process
 
+	///DirectInput Setup
 	IDirectInput8* directInput = nullptr;
 	hr = DirectInput8Create(wc.hInstance, DIRECTINPUT_VERSION, IID_IDirectInput8, (void**)&directInput, nullptr);
 	assert(SUCCEEDED(hr));
 
+	//Keyboard
 	IDirectInputDevice8* keyboard = nullptr;
 	hr = directInput->CreateDevice(GUID_SysKeyboard, &keyboard, NULL);
 	assert(SUCCEEDED(hr));
-
 	hr = keyboard->SetDataFormat(&c_dfDIKeyboard);
 	assert(SUCCEEDED(hr));
-
 	hr = keyboard->SetCooperativeLevel(hwnd, DISCL_FOREGROUND | DISCL_NONEXCLUSIVE | DISCL_NOWINKEY);
 	assert(SUCCEEDED(hr));
+
+	// Mouse
+	IDirectInputDevice8* mouse = nullptr;
+	hr = directInput->CreateDevice(GUID_SysMouse, &mouse, nullptr);
+	assert(SUCCEEDED(hr));
+	hr = mouse->SetDataFormat(&c_dfDIMouse);
+	assert(SUCCEEDED(hr));
+	hr = mouse->SetCooperativeLevel(hwnd, DISCL_FOREGROUND | DISCL_NONEXCLUSIVE);
+	assert(SUCCEEDED(hr));
+
+	ShowCursor(TRUE);
+	ClipCursor(NULL);
+
 
 	//dxCompiler initialization (Before main loop)
 	IDxcUtils* dxcUtils = nullptr;
@@ -1819,14 +1843,56 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			DispatchMessage(&msg);
 		}
 		else {
-			#ifdef USE_IMGUI
-				ImGui_ImplDX12_NewFrame();
-				ImGui_ImplWin32_NewFrame();
-				ImGui::NewFrame();
-			#endif
+#ifdef USE_IMGUI
+			ImGui_ImplDX12_NewFrame();
+			ImGui_ImplWin32_NewFrame();
+			ImGui::NewFrame();
+#endif
+
+			// ====== Camera Input ======== //
+
+			keyboard->Acquire();
+			keyboard->GetDeviceState(sizeof(gKeys), gKeys);
+
+			// Toggle between Debug and Regular camera (Press SPACE)
+			if (gKeys[DIK_SPACE] & 0x80) {  // Key just pressed
+				useDebugCamera = !useDebugCamera;
+			}
+
+			mouse->Acquire();
+			HRESULT hr = mouse->GetDeviceState(sizeof(DIMOUSESTATE), &gMouseState);
+
+
+			float mouseDeltaX = 0;
+			float mouseDeltaY = 0;
+			float mouseDeltaZ = (float)gMouseState.lZ; //wheel
+
+			bool isLeftClick = false;
+			bool isRightClick = false;
+
+			if (SUCCEEDED(hr)) {
+				mouseDeltaX = (float)gMouseState.lX;
+				mouseDeltaY = (float)gMouseState.lY;
+				isLeftClick = (gMouseState.rgbButtons[0] & 0x80) != 0;
+				isRightClick = (gMouseState.rgbButtons[1] & 0x80) != 0;
+			}
+
+			if (useDebugCamera) {
+				if (isLeftClick) {
+					debugCamera.SetMouseDelta(mouseDeltaX, mouseDeltaY);      // Yaw + Pitch
+				}
+				if (isRightClick) {
+					debugCamera.SetMouseRollDelta(mouseDeltaX);          // Roll with horizontal drag
+				}
+				if (mouseDeltaZ != 0) {
+					debugCamera.SetMouseWheelDelta(mouseDeltaZ);      // Optional: forward movement
+				}
+				debugCamera.Update();
+			}
+			
 
 			// === Update ===
-			transform.rotate.y += 0.03f;  
+			//transform.rotate.y += 0.03f;  
 			Matrix4x4 worldMatrix = MakeAffineMatrix(transform.scale, transform.rotate, transform.translate);
 			Matrix4x4 viewMatrixSprite;
 			MakeIdentity4x4(viewMatrixSprite);
@@ -1838,8 +1904,23 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			*transformationMatrixDataSprite = worldViewProjectionMatrixSprite;
 
 			//camera
-			Matrix4x4 cameraMatrix = MakeAffineMatrix(cameraTransform.scale, cameraTransform.rotate, cameraTransform.translate);
-			Matrix4x4 viewMatrix = Inverse(cameraMatrix);
+			Matrix4x4 viewMatrix;
+			if (useDebugCamera) {
+				DebugCamera::Matrix4x4 debugView = debugCamera.GetViewMatrix();
+
+				viewMatrix;  // your global one
+				for (int i = 0; i < 4; ++i) {
+					for (int j = 0; j < 4; ++j) {
+						viewMatrix.m[i][j] = debugView.m[i][j];
+					}
+				}
+			}
+			else {
+				Matrix4x4 cameraMatrix = MakeAffineMatrix(cameraTransform.scale, cameraTransform.rotate, cameraTransform.translate);
+				viewMatrix = Inverse(cameraMatrix);
+			}
+			
+			
 			Matrix4x4 projectionMatrix = MakePerspectiveFovMatrix(0.45f, float(kClientWidth) / float(kClientHeight), 0.1f, 100.0f);
 			Matrix4x4 worldViewProjectionMatrix = Multiply(worldMatrix, Multiply(viewMatrix, projectionMatrix));
 			*wvpData = worldViewProjectionMatrix;
@@ -1862,10 +1943,8 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			//if (Input::GetInstance()->TriggerKey(DIK_SPACE))
 			SoundPlayWave(xAudio2.Get(), soundData1);
 
-			keyboard->Acquire();
+			
 			BYTE key[256] = {};
-			keyboard->GetDeviceState(sizeof(key), key);
-
 			if (key[DIK_0]) {
 				OutputDebugStringA("Hit 0\n");
 			}
@@ -2012,6 +2091,14 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 				directionalLightData->direction = { 0.0f, -1.0f, 2.0f };
 				directionalLightData->intensity = 1.0f;
 			}
+			ImGui::Separator();
+			ImGui::Checkbox("useDebugCamera", &useDebugCamera);
+			ImGui::Text("Camera Mode: %s", useDebugCamera ? "DEBUG CAMERA (SPACE to toggle)" : "Regular Camera (SPACE to toggle)");
+			if (ImGui::Button("Reset Debug Camera")) {
+				//debugCamera.GetTransform();
+				//debugCamera.GetViewMatrix();
+				debugCamera.Initialize();
+			}
 			ImGui::End();
 
 			ImGui::Render();
@@ -2101,7 +2188,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			}
 
 			// Reset command list
-			HRESULT hr = commandAllocator->Reset();
+			hr = commandAllocator->Reset();
 			assert(SUCCEEDED(hr));
 			hr = commandList->Reset(commandAllocator.Get(), nullptr);
 			assert(SUCCEEDED(hr));
@@ -2125,6 +2212,10 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 #ifdef _DEBUG
 	//debugController->Release();
 #endif
+
+	if (mouse) mouse->Release();
+	if (keyboard) keyboard->Release();
+	if (directInput) directInput->Release();
 
 	CoUninitialize();
 	CloseWindow(hwnd);
