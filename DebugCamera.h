@@ -25,8 +25,8 @@ public:
 	void Initialize();
 	void Update();
 	void SetMouseDelta(float dx, float dy) {
-		mouseDeltaX_ += dx * 0.0005f;
-		mouseDeltaY_ += dy * 0.0005f;
+		mouseDeltaX_ = dx * 0.0005f;
+		mouseDeltaY_ = dy * 0.0005f;
 	}
 	void SetMouseRollDelta(float dx) {
 		mouseDeltaZ_ = dx;
@@ -50,7 +50,7 @@ private:
 
 	Vector3 moveSpeed =		{ 0.15f, 0.15f, 0.15f }; //move multiplier
 	Vector3 rotate =		{ 0.0f, 0.0f, 0.0f }; //default rotate speed
-	Vector3 rotateSpeed =	{ 0.005f, 0.005f, 0.005f }; //rotate multiplier
+	Vector3 rotateSpeed =	{ 0.5f, 0.5f, 0.5f }; //rotate multiplier
 
 	float yaw_ = 0.0f;
 	float pitch_ = 0.0f;

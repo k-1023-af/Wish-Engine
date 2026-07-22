@@ -74,16 +74,21 @@ void DebugCamera::Update()
 	*/
 	//----------
 
-	yaw_ -= mouseDeltaX_ * rotateSpeed.x;
-	pitch_ -= mouseDeltaY_ * rotateSpeed.y;
-	pivot_ -= mouseDeltaZ_ * rotateSpeed.z;
+	//yaw_ -= mouseDeltaX_ * rotateSpeed.x;
+	//pitch_ -= mouseDeltaY_ * rotateSpeed.y;
+	//pivot_ -= mouseDeltaZ_ * rotateSpeed.z;
+
+	transform_.rotate.x = mouseDeltaX_ * rotateSpeed.x;
+	transform_.rotate.y = mouseDeltaY_ * rotateSpeed.y;
+	transform_.rotate.z = mouseDeltaZ_ * rotateSpeed.z;
+
 	if (mouseWheelDelta_ != 0.0f) {
 		transform_.translate.z += mouseWheelDelta_ * 0.05f;
 	}
 	
-	Matrix4x4 matRotX = MakeRotateXMatrix(yaw_);
-	Matrix4x4 matRotY = MakeRotateYMatrix(pitch_);
-	Matrix4x4 matRotZ = MakeRotateZMatrix(pivot_);
+	Matrix4x4 matRotX = MakeRotateXMatrix(transform_.rotate.y);
+	Matrix4x4 matRotY = MakeRotateYMatrix(transform_.rotate.x);
+	Matrix4x4 matRotZ = MakeRotateZMatrix(transform_.rotate.z);
 
 	matRotDelta_ = Multiply(matRotZ, Multiply(matRotY, matRotX));
 
@@ -111,7 +116,6 @@ void DebugCamera::Update()
 	calculate the world matrix from the cumulative rotation matrix and translation matrix
 
 	assign the inverse of the world matrix into the view matrix
-	
 	
 	
 	*/

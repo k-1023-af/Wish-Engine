@@ -1926,7 +1926,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			*wvpData = worldViewProjectionMatrix;
 
 			//DrawSphere
-			transformModel.rotate.y += 0.02f;
+			//transformModel.rotate.y += 0.02f;
 			Matrix4x4 worldSphereMatrix = MakeAffineMatrix(transformModel.scale, transformModel.rotate, transformModel.translate);
 			//Matrix4x4 sphereInverseMatrix = Inverse(worldSphereMatrix);
 			Matrix4x4 sphereProjectionMatrix = MakePerspectiveFovMatrix(0.45f, float(kClientWidth) / float(kClientHeight), 0.1f, 100.0f);
