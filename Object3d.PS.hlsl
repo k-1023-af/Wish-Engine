@@ -16,12 +16,6 @@ SamplerState gSampler : register(s0);
 ConstantBuffer<Material> gMaterial : register(b0);
 ConstantBuffer<DirectionalLight> gDirectionalLight : register(b1);
 
-//ConstantBuffer<Material> gMaterial0 : register(b1);
-//ConstantBuffer<Material> gMaterial1 : register(b2);
-//ConstantBuffer<Material> gMaterial2 : register(b3);
-//Texture2D<float4> gTexture0 : register(t0);
-//Texture2D<float4> gTexture1 : register(t1);
-
 
 PixelShaderOutput main(VertexShaderOutput input) {
     PixelShaderOutput output;
@@ -33,8 +27,14 @@ PixelShaderOutput main(VertexShaderOutput input) {
     
     if (gMaterial.enableLighting != 0)
     {
-        float NdotL = dot(normalize(input.normal), -gDirectionalLight.direction);
-        float cos = pow(NdotL * 0.5f, 2.0f);
+        float3 N = normalize(input.normal);
+        float3 L = normalize(-gDirectionalLight.direction);
+        
+        float NdotL = dot(N, L);
+        float halfLambert = NdotL * 0.5f + 0.5f;
+        
+        float power = 2.0f;
+        float cos = pow(halfLambert, power);
         
         color.rgb *= gDirectionalLight.color.rgb * cos * gDirectionalLight.intensity;
     }

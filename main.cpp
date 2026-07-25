@@ -189,7 +189,7 @@ ModelData LoadObjFile(const std::string& directoryPath, const std::string& filen
 				}
 				// Load vertices, normals, texture coordinates, and material data from the OBJ file
 				Vector4 position = positions[elementIndices[0] - 1];
-				position.x *= -1.0f;
+				position.x *= 1.0f;
 				Vector2 texcoord = texcoords[elementIndices[1] - 1];
 				texcoord.y = 1.0f - texcoord.y; /// Draw texture upside down
 				Vector3 normal = normals[elementIndices[2] - 1];
@@ -1058,7 +1058,7 @@ SphereMesh DrawSphere(const uint32_t subdivision, float radius) {
 			float vNext = 1.0f - (float)(latIndex + 1) / (float)kSubdivision;
 			float uNext = (float)(lonIndex + 1) / (float)kSubdivision;
 
-			VertexData vertexData[sizeof(VertexData)] = {}; //a,b,c, c,b,d
+			VertexData vertexData[6] = {}; //a,b,c, c,b,d
 			vertexData[0].position.x = radius * cos(lat) * cosf(lon);
 			vertexData[0].position.y = radius * sin(lat);
 			vertexData[0].position.z = radius * cos(lat) * sin(lon);
@@ -1322,17 +1322,24 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	hr = device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, commandAllocator.Get(), nullptr, IID_PPV_ARGS(&commandList));
 	assert(SUCCEEDED(hr));
 
+	///------------Load Textures ----------------
 	DirectX::ScratchImage mipImages = LoadTexture("Resources/uvChecker.png");
-	const DirectX::TexMetadata& metadata = mipImages.GetMetadata();
-	Microsoft::WRL::ComPtr<ID3D12Resource> textureResource = CreateTextureResource(device, metadata);
+	const DirectX::TexMetadata& metadata0 = mipImages.GetMetadata();
+	Microsoft::WRL::ComPtr<ID3D12Resource> textureResource0 = CreateTextureResource(device, metadata0);
+	Microsoft::WRL::ComPtr<ID3D12Resource> intermediateResource0 = UploadTextureData(textureResource0.Get(), mipImages, device.Get(), commandList.Get());
 
-	DirectX::ScratchImage mipImages2 = LoadTexture("Resources/monsterBall.png");
+	DirectX::ScratchImage mipImages1 = LoadTexture("Resources/monsterBall.png");
+	const DirectX::TexMetadata& metadata1 = mipImages1.GetMetadata();
+	Microsoft::WRL::ComPtr<ID3D12Resource> textureResource1 = CreateTextureResource(device, metadata1);
+	Microsoft::WRL::ComPtr<ID3D12Resource> intermediateResource1 = UploadTextureData(textureResource1.Get(), mipImages1, device.Get(), commandList.Get());
+
+	DirectX::ScratchImage mipImages2 = LoadTexture("Resources/sample.png");
 	//DirectX::ScratchImage mipImages2 = LoadTexture(modelData.material.textureFilePath);
 	const DirectX::TexMetadata& metadata2 = mipImages2.GetMetadata();
 	Microsoft::WRL::ComPtr<ID3D12Resource> textureResource2 = CreateTextureResource(device, metadata2);
-
-	Microsoft::WRL::ComPtr<ID3D12Resource> intermediateResource = UploadTextureData(textureResource.Get(), mipImages, device.Get(), commandList.Get());
 	Microsoft::WRL::ComPtr<ID3D12Resource> intermediateResource2 = UploadTextureData(textureResource2.Get(), mipImages2, device.Get(), commandList.Get());
+
+	//--------------Load Texture end --------------
 
 	//Depth Stencil Buffer
 	Microsoft::WRL::ComPtr<ID3D12Resource> depthStencilResource = CreateDepthStencilTextureResource(device, kClientWidth, kClientHeight);
@@ -1459,6 +1466,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	directionalLightData->color = { 1.0f, 1.0f, 1.0f, 1.0f };
 	directionalLightData->direction = { 0.0f, -1.0f, 2.0f };
 	directionalLightData->intensity = 1.0f;
+	float halfLambertPower = 2.0f;
 
 	//Serialize and make into binary
 	ID3DBlob* signatureBlob = nullptr;
@@ -1585,7 +1593,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 	
 
-	//VertexBufferView
+	////VertexBufferView
 	//ID3D12Resource* vertexResource = CreateBufferResource(device, sizeof(VertexData) * 6);
 	//vertexResource->SetName(L"vertexResource");
 	//assert(SUCCEEDED(hr));
@@ -1709,26 +1717,15 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 	WorldTransform transformModel{ { 1.0f, 1.0f, 1.0f}, { 0.0f, 0.0f, 0.0f }, {0.0f, 0.0f, 5.0f} };
 
-	//SphereMesh sphere = DrawSphere(16, 1);
-
-	ModelData modelData = LoadObjFile("Resources", "axis.obj");
-	Microsoft::WRL::ComPtr<ID3D12Resource> modelVertexResource = CreateBufferResource(device, sizeof(VertexData) * modelData.vertices.size());
-	D3D12_VERTEX_BUFFER_VIEW modelVertexBufferView{};
-	modelVertexBufferView.BufferLocation = modelVertexResource->GetGPUVirtualAddress();
-	modelVertexBufferView.SizeInBytes = UINT(sizeof(VertexData) * modelData.vertices.size());
-	modelVertexBufferView.StrideInBytes = sizeof(VertexData);
-
-	VertexData* modelVertexData = nullptr;
-	modelVertexResource->Map(0, nullptr, reinterpret_cast<void**>(&modelVertexData));
-	std::memcpy(modelVertexData, modelData.vertices.data(), sizeof(VertexData)* modelData.vertices.size());
-	modelVertexResource->Unmap(0, nullptr);
-
+	
 	// Create dedicated WVP constant buffer for sphere
 	Microsoft::WRL::ComPtr<ID3D12Resource> modelWVPResource = CreateBufferResource(device, sizeof(TransformationMatrix));
 	modelWVPResource->SetName(L"modelWVPResource");
-
+	
 	TransformationMatrix* modelTransformData = nullptr;
 	modelWVPResource->Map(0, nullptr, reinterpret_cast<void**>(&modelTransformData));
+
+
 	//-------------------Make model data *end*
 
 	//Pull Resources from Swap Chain (create rtv)
@@ -1743,18 +1740,23 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	rtvDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
 	rtvDesc.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2D;
 
-
 	D3D12_CPU_DESCRIPTOR_HANDLE rtvHandles[2];
 	rtvHandles[0] = rtvDescriptorHeap->GetCPUDescriptorHandleForHeapStart();;
 	device->CreateRenderTargetView(swapChainResources[0].Get(), &rtvDesc, rtvHandles[0]);
 	rtvHandles[1].ptr = rtvHandles[0].ptr + device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
 	device->CreateRenderTargetView(swapChainResources[1].Get(), &rtvDesc, rtvHandles[1]);
 
-	D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc{};
-	srvDesc.Format = metadata.format;
-	srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-	srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
-	srvDesc.Texture2D.MipLevels = UINT(metadata.mipLevels);
+	D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc0{};
+	srvDesc0.Format = metadata0.format;
+	srvDesc0.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+	srvDesc0.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+	srvDesc0.Texture2D.MipLevels = UINT(metadata0.mipLevels);
+
+	D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc1{};
+	srvDesc1.Format = metadata1.format;
+	srvDesc1.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+	srvDesc1.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+	srvDesc1.Texture2D.MipLevels = UINT(metadata1.mipLevels);
 
 	D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc2{};
 	srvDesc2.Format = metadata2.format;
@@ -1770,20 +1772,71 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	const uint32_t descriptorSizeRTV = device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
 	const uint32_t descriptorSizeDSV = device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_DSV);
 
-	D3D12_CPU_DESCRIPTOR_HANDLE textureSrvHandleCPU = GetCPUDescriptorHandle(srvDescriptorHeap.Get(), descriptorSizeSRV, 1);
-	D3D12_GPU_DESCRIPTOR_HANDLE textureSrvHandleGPU = GetGPUDescriptorHandle(srvDescriptorHeap.Get(), descriptorSizeSRV, 1);
-	device->CreateShaderResourceView(textureResource.Get(), &srvDesc, textureSrvHandleCPU);
+	D3D12_CPU_DESCRIPTOR_HANDLE textureSrvHandleCPU0 = GetCPUDescriptorHandle(srvDescriptorHeap.Get(), descriptorSizeSRV, 1);
+	D3D12_GPU_DESCRIPTOR_HANDLE textureSrvHandleGPU0 = GetGPUDescriptorHandle(srvDescriptorHeap.Get(), descriptorSizeSRV, 1);
+	device->CreateShaderResourceView(textureResource0.Get(), &srvDesc0, textureSrvHandleCPU0);
+
+	D3D12_CPU_DESCRIPTOR_HANDLE textureSrvHandleCPU1 = GetCPUDescriptorHandle(srvDescriptorHeap.Get(), descriptorSizeSRV, 2);
+	D3D12_GPU_DESCRIPTOR_HANDLE textureSrvHandleGPU1 = GetGPUDescriptorHandle(srvDescriptorHeap.Get(), descriptorSizeSRV, 2);
+	device->CreateShaderResourceView(textureResource1.Get(), &srvDesc1, textureSrvHandleCPU1);
 	
-	D3D12_CPU_DESCRIPTOR_HANDLE textureSrvHandleCPU2 = GetCPUDescriptorHandle(srvDescriptorHeap.Get(), descriptorSizeSRV, 2);
-	D3D12_GPU_DESCRIPTOR_HANDLE textureSrvHandleGPU2 = GetGPUDescriptorHandle(srvDescriptorHeap.Get(), descriptorSizeSRV, 2);
+	D3D12_CPU_DESCRIPTOR_HANDLE textureSrvHandleCPU2 = GetCPUDescriptorHandle(srvDescriptorHeap.Get(), descriptorSizeSRV, 3);
+	D3D12_GPU_DESCRIPTOR_HANDLE textureSrvHandleGPU2 = GetGPUDescriptorHandle(srvDescriptorHeap.Get(), descriptorSizeSRV, 3);
 	device->CreateShaderResourceView(textureResource2.Get(), &srvDesc2, textureSrvHandleCPU2);
 
 	//
 	float clearColor[] = { 0.1f, 0.25f, 0.5f, 1.0f };
 
-	bool useMonsterBall = true;
-
 	bool isLight = false;
+
+	bool showSprite = true;
+
+	//////////----------select model and texture data -------------------
+	int selectModel = 0;
+	int modelTexture[5] = { 0, 0, 0, 0, 0 };
+	const char* modelNames[] = { "plane.obj", "multiMesh.obj", "axis.obj", "multiMaterial.obj" , "Sphere"};
+	const char* textureNames[] = { "uvChecker", "monsterball", "sample" };
+
+	D3D12_GPU_DESCRIPTOR_HANDLE textureHandles[] = {
+		textureSrvHandleGPU0,
+		textureSrvHandleGPU1,
+		textureSrvHandleGPU2,
+	};
+
+	const int kModelCount = 5;
+
+	ModelData modelData[kModelCount]; 
+	modelData[0] = LoadObjFile("Resources", "plane.obj");			// [0] 2D PLANE
+	modelData[1] = LoadObjFile("Resources", "multiMesh.obj");		// [1] MULTI-MESH
+	modelData[2] = LoadObjFile("Resources", "axis.obj");			// [2] AXIS
+	modelData[3] = LoadObjFile("Resources", "multiMaterial.obj");	// [3] MULTI MATERIAL
+		{
+			SphereMesh sphere = DrawSphere(16, 1);
+			modelData[4].vertices = std::move(sphere.vertices);
+		}
+	
+
+	Microsoft::WRL::ComPtr<ID3D12Resource> modelVertexResources[kModelCount];
+	D3D12_VERTEX_BUFFER_VIEW modelVertexBufferViews[kModelCount];
+
+	for (int i = 0; i < kModelCount; ++i) {
+		modelVertexResources[i] = CreateBufferResource(
+			device, sizeof(VertexData) * modelData[i].vertices.size());
+
+		modelVertexBufferViews[i].BufferLocation =
+			modelVertexResources[i]->GetGPUVirtualAddress();
+		modelVertexBufferViews[i].SizeInBytes =
+			UINT(sizeof(VertexData) * modelData[i].vertices.size());
+		modelVertexBufferViews[i].StrideInBytes = sizeof(VertexData);
+
+		VertexData* mapped = nullptr;
+		modelVertexResources[i]->Map(0, nullptr, reinterpret_cast<void**>(&mapped));
+		std::memcpy(mapped, modelData[i].vertices.data(),
+			sizeof(VertexData) * modelData[i].vertices.size());
+		modelVertexResources[i]->Unmap(0, nullptr);
+	}
+	////////////////-----------------------------------------------
+
 	
 	////Fence (Before main loop)
 	Microsoft::WRL::ComPtr<ID3D12Fence> fence = nullptr;
@@ -1959,98 +2012,20 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 #ifdef USE_IMGUI
 			//ImGui::ShowDemoWindow();
 
-			//ImGui::Begin("Sprite Editor");
-			//ImGui::Text("Color RGB (Shared)");
-			//if (ImGui::ColorEdit3("Triangle Color", &materialData->color.x)) {
-			//}
-			//ImGui::Separator();
-			//// Scale
-			//ImGui::DragFloat3("Scale", &transformSprite.scale.x, 0.01f, 0.1f, 10.0f);
-			//// Rotation
-			//if (ImGui::DragFloat3("Rotation", &transformSprite.rotate.x, 0.03f, -10.0f, 10.0f)) {
-			//}
-			//// Translation
-			//ImGui::DragFloat3("Position", &transformSprite.translate.x, 1.0f, 0.0f, 640.0f);
-			//// Reset button
-			//if (ImGui::Button("Reset Transform")) {
-			//	transformSprite.scale = { 1.0f, 1.0f, 1.0f };
-			//	transformSprite.rotate = { 0.0f, 0.0f, 0.0f };
-			//	transformSprite.translate = { 0.0f, 0.0f, 0.0f };
-			//}
-			//ImGui::Separator();
-			//ImGui::Text("UV Transform (Shared)"); 
-			//// UV Transform
-			//ImGui::DragFloat2("UVTranslate", &uvTransformSprite.translate.x, 0.01f, -10.0f, 10.0f);
-			//ImGui::DragFloat2("UVScale", &uvTransformSprite.scale.x, 0.01f, -10.0f, 10.0f);
-			//ImGui::SliderAngle("UVRotate", &uvTransformSprite.rotate.z);
-			//if (ImGui::Button("Reset UV Transform")) {
-			//	uvTransformSprite.scale = { 1.0f, 1.0f, 1.0f };
-			//	uvTransformSprite.rotate = { 0.0f, 0.0f, 0.0f };
-			//	uvTransformSprite.translate = { 0.0f, 0.0f, 0.0f };
-			//}
-			//ImGui::End();
-
-			//ImGui::Begin("Triangle Editor");
-			//ImGui::Text("Color RGB (Shared)");
-			//if (ImGui::ColorEdit3("Triangle Color", &materialData->color.x)) {
-			//}
-			//ImGui::Separator();
-			//// Scale
-			//ImGui::DragFloat3("Scale", &transform.scale.x, 0.01f, 0.1f, 10.0f);
-			//// Rotation
-			//if (ImGui::DragFloat3("Rotation", &transform.rotate.x, 0.03f, -10.0f, 10.0f)) {
-			//}
-			//// Translation
-			//ImGui::DragFloat3("Position", &transform.translate.x, 0.01f, -5.0f, 5.0f);
-			//// Reset button
-			//if (ImGui::Button("Reset Transform")) {
-			//	transform.scale = { 1.0f, 1.0f, 1.0f };
-			//	transform.rotate = { 0.0f, 0.0f, 0.0f };
-			//	transform.translate = { 0.0f, 0.0f, 0.0f };
-			//}
-			//ImGui::End();
-
-			//ImGui::Begin("Sphere Editor");
-			//ImGui::Text("Color RGB (Shared)");
-			//if (ImGui::ColorEdit3("Sphere Color", &materialSpriteData->color.x)) {}
-			//ImGui::Checkbox("useMonsterBall", &useMonsterBall);
-			//ImGui::Separator();
-			//// Scale
-			//ImGui::DragFloat3("Scale", &transformSphere.scale.x, 0.01f, 0.1f, 10.0f);
-			//// Rotation
-			//ImGui::DragFloat3("Rotation", &transformSphere.rotate.x, 0.03f, -10.0f, 10.0f);
-			//// Translation
-			//ImGui::DragFloat3("Position", &transformSphere.translate.x, 0.01f, -10.0f, 10.0f);
-			//// Reset
-			//if (ImGui::Button("Reset Sphere")) {
-			//	transformSphere.scale = { 1.0f, 1.0f, 1.0f };
-			//	transformSphere.rotate = { 0.0f, 0.0f, 0.0f };
-			//	transformSphere.translate = { 0.0f, 0.0f, 1.0f };
-			//}
-			//ImGui::Separator();
-			//ImGui::Checkbox("enableLighting", &isLight);
-			//if (isLight) {
-			//	materialSpriteData->enableLighting = 1;
-			//}
-			//else {
-			//	materialSpriteData->enableLighting = 0;
-			//}
-			//if (ImGui::ColorEdit3("LightColor", &directionalLightData->color.x)) {}
-			//ImGui::DragFloat3("LightDirection", &directionalLightData->direction.x, 0.01f, -2.0f, 2.0f);
-			//ImGui::DragFloat("Intensity", &directionalLightData->intensity, 0.01f, 0.0f, 2.0f);
-			//if (ImGui::Button("Reset Lighting")) {
-			//	materialSpriteData->color = { 1.0f, 1.0f, 1.0f, 1.0f };
-			//	directionalLightData->color = { 1.0f, 1.0f, 1.0f, 1.0f };
-			//	directionalLightData->direction = { 0.0f, -1.0f, 2.0f };
-			//	directionalLightData->intensity = 1.0f;
-			//}
-			//ImGui::End();
-
 			ImGui::Begin("Model Editor");
+			ImGui::Checkbox("Show 2D Sprite", &showSprite);
+
+			ImGui::Separator();
+			ImGui::Text("Model 1 Selection");
+			ImGui::Combo("Select Model", &selectModel, modelNames, IM_ARRAYSIZE(modelNames));
+			ImGui::Combo("Texture for this model", &modelTexture[selectModel], textureNames, IM_ARRAYSIZE(textureNames));
+			
+			ImGui::Separator();
 			ImGui::Text("Color RGB (Shared)");
 			if (ImGui::ColorEdit3("Texture Color", &materialSpriteData->color.x)) {}
-			ImGui::Checkbox("useMonsterBall", &useMonsterBall);
+
 			ImGui::Separator();
+			ImGui::Text("SRT Transform");
 			// Scale
 			ImGui::DragFloat3("Scale", &transformModel.scale.x, 0.01f, 0.1f, 10.0f);
 			// Rotation
@@ -2063,6 +2038,41 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 				transformModel.rotate = { 0.0f, 0.0f, 0.0f };
 				transformModel.translate = { 0.0f, 0.0f, 5.0f };
 			}
+
+			ImGui::Separator();
+			ImGui::Text("Model 2 Selection");
+			ImGui::Combo("Select Model", &selectModel, modelNames, IM_ARRAYSIZE(modelNames));
+			ImGui::Combo("Texture for this model", &modelTexture[selectModel], textureNames, IM_ARRAYSIZE(textureNames));
+			ImGui::Checkbox("Show 2D Sprite", &showSprite);
+
+			ImGui::Separator();
+			ImGui::Text("Color RGB (Shared)");
+			if (ImGui::ColorEdit3("Texture Color", &materialSpriteData->color.x)) {}
+
+			ImGui::Separator();
+			ImGui::Text("SRT Transform");
+			// Scale
+			ImGui::DragFloat3("Scale", &transformModel.scale.x, 0.01f, 0.1f, 10.0f);
+			// Rotation
+			ImGui::DragFloat3("Rotation", &transformModel.rotate.x, 0.03f, -10.0f, 10.0f);
+			// Translation
+			ImGui::DragFloat3("Position", &transformModel.translate.x, 0.01f, -10.0f, 10.0f);
+			// Reset
+			if (ImGui::Button("Reset Transform")) {
+				transformModel.scale = { 1.0f, 1.0f, 1.0f };
+				transformModel.rotate = { 0.0f, 0.0f, 0.0f };
+				transformModel.translate = { 0.0f, 0.0f, 5.0f };
+			}
+			ImGui::End();
+
+			ImGui::Begin("Debug Camera, UV Transform, and Lighting");
+			ImGui::Separator();
+			ImGui::Checkbox("useDebugCamera", &useDebugCamera);
+			ImGui::Text("Camera Mode: %s", useDebugCamera ? "DEBUG CAMERA (SPACE to toggle)" : "Regular Camera (SPACE to toggle)");
+			if (ImGui::Button("Reset Debug Camera")) {
+				debugCamera.Initialize();
+			}
+
 			ImGui::Separator();
 			ImGui::Text("UV Transform (Shared)");
 			// UV Transform
@@ -2083,22 +2093,17 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 				materialSpriteData->enableLighting = 0;
 			}
 			if (ImGui::ColorEdit3("LightColor", &directionalLightData->color.x)) {}
-			ImGui::DragFloat3("LightDirection", &directionalLightData->direction.x, 0.01f, -2.0f, 2.0f);
-			ImGui::DragFloat("Intensity", &directionalLightData->intensity, 0.01f, 0.0f, 2.0f);
+			ImGui::DragFloat3("LightDirection", &directionalLightData->direction.x, 0.01f, -10.0f, 10.0f);
+			ImGui::DragFloat("Intensity", &directionalLightData->intensity, 0.01f, 0.0f, 3.0f);
+			ImGui::DragFloat("HalfLambert Power", &halfLambertPower, 0.05f, 0.5f, 8.0f);
 			if (ImGui::Button("Reset Lighting")) {
 				materialSpriteData->color = { 1.0f, 1.0f, 1.0f, 1.0f };
 				directionalLightData->color = { 1.0f, 1.0f, 1.0f, 1.0f };
 				directionalLightData->direction = { 0.0f, -1.0f, 2.0f };
 				directionalLightData->intensity = 1.0f;
+				halfLambertPower = 2.0f;
 			}
-			ImGui::Separator();
-			ImGui::Checkbox("useDebugCamera", &useDebugCamera);
-			ImGui::Text("Camera Mode: %s", useDebugCamera ? "DEBUG CAMERA (SPACE to toggle)" : "Regular Camera (SPACE to toggle)");
-			if (ImGui::Button("Reset Debug Camera")) {
-				//debugCamera.GetTransform();
-				//debugCamera.GetViewMatrix();
-				debugCamera.Initialize();
-			}
+
 			ImGui::End();
 
 			ImGui::Render();
@@ -2132,34 +2137,25 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			// Material and Texture are shared
 			commandList->SetGraphicsRootConstantBufferView(1, materialResourceSprite->GetGPUVirtualAddress());
 			commandList->SetGraphicsRootConstantBufferView(3, materialResourceLight->GetGPUVirtualAddress());
-			commandList->SetGraphicsRootDescriptorTable(2, useMonsterBall ? textureSrvHandleGPU2 : textureSrvHandleGPU);
+			commandList->SetGraphicsRootDescriptorTable(2, textureHandles[modelTexture[selectModel]]);
 			
-
-			// 1. Draw 3D Triangle(s) - Perspective
-			//commandList->SetGraphicsRootConstantBufferView(0, wvpResource->GetGPUVirtualAddress());
-			//commandList->IASetVertexBuffers(0, 1, &vertexBufferView);
-			//commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-			//commandList->DrawInstanced(6, 1, 0, 0);  
-
 			//// 2. ModelData
 			commandList->SetGraphicsRootConstantBufferView(0, modelWVPResource->GetGPUVirtualAddress());
-			
-			commandList->IASetVertexBuffers(0, 1, &modelVertexBufferView);
-			commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-			commandList->DrawInstanced(UINT(modelData.vertices.size()), 1, 0, 0);
 
-			commandList->SetGraphicsRootDescriptorTable(2, textureSrvHandleGPU); //switch textureHandle before drawinng Sprite
+			commandList->IASetVertexBuffers(0, 1, &modelVertexBufferViews[selectModel]);
+			commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+			commandList->DrawInstanced(
+				UINT(modelData[selectModel].vertices.size()), 1, 0, 0);
 
 			//// 3. Draw Sprite - Orthographic (2D overlay)
-			//commandList->SetGraphicsRootConstantBufferView(0, transformationMatrixResourceSprite->GetGPUVirtualAddress());
-			//commandList->IASetVertexBuffers(0, 1, &vertexBufferViewSprite);
-			//commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-			//commandList->DrawInstanced(6, 1, 0, 0);  
-
-			//// 4. when drawing Sprite
-			commandList->IASetIndexBuffer(&indexBufferViewSprite);
-			commandList->DrawIndexedInstanced(6, 1, 0, 0, 0);
-
+			if (showSprite) {
+				commandList->SetGraphicsRootConstantBufferView(0, transformationMatrixResourceSprite->GetGPUVirtualAddress());
+				commandList->SetGraphicsRootDescriptorTable(2, textureHandles[modelTexture[selectModel]]);
+				commandList->IASetVertexBuffers(0, 1, &vertexBufferViewSprite);
+				commandList->IASetIndexBuffer(&indexBufferViewSprite);
+				commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+				commandList->DrawIndexedInstanced(6, 1, 0, 0, 0);
+			}
 			
 		#ifdef USE_IMGUI
 			ImGui_ImplDX12_RenderDrawData(ImGui::GetDrawData(), commandList.Get());
