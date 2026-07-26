@@ -2043,7 +2043,6 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			ImGui::Text("Model 2 Selection");
 			ImGui::Combo("Select Model", &selectModel, modelNames, IM_ARRAYSIZE(modelNames));
 			ImGui::Combo("Texture for this model", &modelTexture[selectModel], textureNames, IM_ARRAYSIZE(textureNames));
-			ImGui::Checkbox("Show 2D Sprite", &showSprite);
 
 			ImGui::Separator();
 			ImGui::Text("Color RGB (Shared)");
