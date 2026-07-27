@@ -6,7 +6,9 @@ struct Material
 {
     float4 color;
     int32_t enableLighting;
-    //float padding[3]; // Padding to align the next member to a 16-byte boundary
+    int32_t lightingMode;
+    float halfLambertPower;
+    float padding; // Padding to align the next member to a 16-byte boundary
     float4x4 uvTransform;
 };
 
@@ -34,7 +36,20 @@ PixelShaderOutput main(VertexShaderOutput input) {
         float halfLambert = NdotL * 0.5f + 0.5f;
         
         float power = 2.0f;
-        float cos = pow(halfLambert, power);
+        //float cos = pow(halfLambert, power);
+        
+        float cos;
+        if (gMaterial.lightingMode == 0)
+        {
+            cos = saturate(NdotL);
+
+        }
+        else
+        {
+            float halfLambert = NdotL * 0.5f + 0.5f;
+            //cos = pow(saturate(halfLambert), gMaterial.halfLambertPower);
+            cos = pow(halfLambert, power);
+        }
         
         color.rgb *= gDirectionalLight.color.rgb * cos * gDirectionalLight.intensity;
     }

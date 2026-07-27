@@ -97,7 +97,9 @@ struct VertexData {
 struct Material {
 	Vector4 color;
 	int32_t enableLighting;
-	float padding[3];
+	int32_t lightingMode;
+	float halfLambertPower;
+	float padding;
 	Matrix4x4 uvTransform;
 };
 
@@ -290,6 +292,8 @@ SoundData SoundLoadWave(const char* filename) {
 	//3. File close
 
 	//4. return read sound data
+	
+
 	SoundData soundData = {};
 
 	soundData.wfex = format.fmt;
@@ -307,24 +311,39 @@ void SoundUnload(SoundData* soundData) {
 	soundData->wfex = {};
 }
 
-void SoundPlayWave(IXAudio2* xAudio2, const SoundData& soundData) {
+IXAudio2SourceVoice* pSourceVoice = nullptr;
+bool isSoundPlaying = false;
+
+void SoundPlayWave(IXAudio2* xAudio2, const SoundData& soundData, bool play) {
 	HRESULT hr;
 
 	//1. Create source voice
-	IXAudio2SourceVoice* pSourceVoice = nullptr;
-	hr = xAudio2->CreateSourceVoice(&pSourceVoice, &soundData.wfex);
-	assert(SUCCEEDED(hr));
+	if (!pSourceVoice) {
+		//IXAudio2SourceVoice* pSourceVoice = nullptr;
+		hr = xAudio2->CreateSourceVoice(&pSourceVoice, &soundData.wfex);
+		assert(SUCCEEDED(hr));
+	}
 
 	//2. Reproduced wave data settings
-	XAUDIO2_BUFFER buf{};
-	buf.pAudioData = soundData.pBuffer;
-	buf.AudioBytes = soundData.bufferSize;
-	buf.Flags = XAUDIO2_END_OF_STREAM;
+	if (play) {
+		pSourceVoice->Stop(0);
+		pSourceVoice->FlushSourceBuffers();
 
-	//3. Start produced data
-	hr = pSourceVoice->SubmitSourceBuffer(&buf);
-	hr = pSourceVoice->Start();
+		XAUDIO2_BUFFER buf{};
+		buf.pAudioData = soundData.pBuffer;
+		buf.AudioBytes = soundData.bufferSize;
+		buf.Flags = XAUDIO2_END_OF_STREAM;
+
+		//3. Start produced data
+		hr = pSourceVoice->SubmitSourceBuffer(&buf);
+		hr = pSourceVoice->Start();
+	}
+	else {
+		pSourceVoice->Stop(0);
+		pSourceVoice->FlushSourceBuffers();
+	}
 }
+
 
 
 Matrix4x4 MakeIdentity4x4(Matrix4x4& matrix) {
@@ -673,11 +692,12 @@ WorldTransform uvTransformSprite = {
 	{ 0.0f, 0.0f, 0.0f },  // translate
 };
 
+BYTE gKeys[256] = {};
+DIMOUSESTATE gMouseState = {};
 //LPDIRECTINPUT8 gDirectInput = nullptr;
 //LPDIRECTINPUTDEVICE8 gKeyboard = nullptr;
 //LPDIRECTINPUTDEVICE8 gMouse = nullptr;
-BYTE gKeys[256] = {};
-DIMOUSESTATE gMouseState = {};
+
 //
 //void InitializeInput(HWND hwnd) {
 //	DirectInput8Create(GetModuleHandle(nullptr), DIRECTINPUT_VERSION, IID_IDirectInput8, (void**)&gDirectInput, nullptr);
@@ -1451,7 +1471,9 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	Material* materialSpriteData = nullptr;
 	materialResourceSprite->Map(0, nullptr, reinterpret_cast<void**>(&materialSpriteData));
 	materialSpriteData->color = { 1.0f, 1.0f, 1.0f, 1.0f }; //Lighting color
-	materialSpriteData->enableLighting = false;
+	materialSpriteData->enableLighting = 0;
+	materialSpriteData->lightingMode = 1;
+	materialSpriteData->halfLambertPower = 2.0f;
 	//materialSpriteData->uvTransform = {
 	//	 1.0f, 1.0f, 1.0f,
 	//	 0.0f, 0.0f, 0.0f,
@@ -1715,15 +1737,15 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 	//-------------------Make model data *start*
 
-	WorldTransform transformModel{ { 1.0f, 1.0f, 1.0f}, { 0.0f, 0.0f, 0.0f }, {0.0f, 0.0f, 5.0f} };
-
 	
 	// Create dedicated WVP constant buffer for sphere
-	Microsoft::WRL::ComPtr<ID3D12Resource> modelWVPResource = CreateBufferResource(device, sizeof(TransformationMatrix));
-	modelWVPResource->SetName(L"modelWVPResource");
-	
-	TransformationMatrix* modelTransformData = nullptr;
-	modelWVPResource->Map(0, nullptr, reinterpret_cast<void**>(&modelTransformData));
+	Microsoft::WRL::ComPtr<ID3D12Resource> modelWVPResource[2];
+	TransformationMatrix* modelTransformData[2] = {};
+
+	for (int i = 0; i < 2; ++i) {
+		modelWVPResource[i] = CreateBufferResource(device, sizeof(TransformationMatrix));
+		modelWVPResource[i]->Map(0, nullptr, reinterpret_cast<void**>(&modelTransformData[i]));
+	}
 
 
 	//-------------------Make model data *end*
@@ -1791,9 +1813,20 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 	bool showSprite = true;
 
+	bool showModel1 = true;
+	bool showModel2 = false;
+
 	//////////----------select model and texture data -------------------
-	int selectModel = 0;
-	int modelTexture[5] = { 0, 0, 0, 0, 0 };
+	int selectModel[2] = { 0, 1 };
+	int modelTexture[2][5] = {
+		{ 0, 0, 0, 0, 0 },
+		{ 0, 0, 0, 0, 0 },
+	};
+	WorldTransform transformModel[2] = {
+		{{ 1.0f, 1.0f, 1.0f}, { 0.0f, 0.0f, 0.0f }, {2.0f, 0.0f, 5.0f}},
+		{{ 1.0f, 1.0f, 1.0f}, { 0.0f, 0.0f, 0.0f }, {-2.0f, 0.0f, 5.0f}},
+		};
+
 	const char* modelNames[] = { "plane.obj", "multiMesh.obj", "axis.obj", "multiMaterial.obj" , "Sphere"};
 	const char* textureNames[] = { "uvChecker", "monsterball", "sample" };
 
@@ -1902,14 +1935,19 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			ImGui::NewFrame();
 #endif
 
-			// ====== Camera Input ======== //
-
+			// ====== Sound and Camera Input ======== //
+			static BYTE prevKeys[256] = {};
 			keyboard->Acquire();
 			keyboard->GetDeviceState(sizeof(gKeys), gKeys);
 
 			// Toggle between Debug and Regular camera (Press SPACE)
-			if (gKeys[DIK_SPACE] & 0x80) {  // Key just pressed
-				useDebugCamera = !useDebugCamera;
+			bool spaceKeyPressed = (gKeys[DIK_SPACE] & 0x80) && !(prevKeys[DIK_SPACE] & 0x80);
+			memcpy(prevKeys, gKeys, sizeof(prevKeys));
+
+			if (spaceKeyPressed) {  // Key just pressed
+				//useDebugCamera = !useDebugCamera;
+				isSoundPlaying = !isSoundPlaying;
+				SoundPlayWave(xAudio2.Get(), soundData1, isSoundPlaying);
 			}
 
 			mouse->Acquire();
@@ -1946,6 +1984,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 			// === Update ===
 			//transform.rotate.y += 0.03f;  
+
 			Matrix4x4 worldMatrix = MakeAffineMatrix(transform.scale, transform.rotate, transform.translate);
 			Matrix4x4 viewMatrixSprite;
 			MakeIdentity4x4(viewMatrixSprite);
@@ -1960,47 +1999,41 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			Matrix4x4 viewMatrix;
 			if (useDebugCamera) {
 				DebugCamera::Matrix4x4 debugView = debugCamera.GetViewMatrix();
-
-				viewMatrix;  // your global one
-				for (int i = 0; i < 4; ++i) {
-					for (int j = 0; j < 4; ++j) {
+				for (int i = 0; i < 4; ++i)
+					for (int j = 0; j < 4; ++j)
 						viewMatrix.m[i][j] = debugView.m[i][j];
-					}
-				}
 			}
 			else {
 				Matrix4x4 cameraMatrix = MakeAffineMatrix(cameraTransform.scale, cameraTransform.rotate, cameraTransform.translate);
 				viewMatrix = Inverse(cameraMatrix);
 			}
-			
-			
-			Matrix4x4 projectionMatrix = MakePerspectiveFovMatrix(0.45f, float(kClientWidth) / float(kClientHeight), 0.1f, 100.0f);
-			Matrix4x4 worldViewProjectionMatrix = Multiply(worldMatrix, Multiply(viewMatrix, projectionMatrix));
-			*wvpData = worldViewProjectionMatrix;
 
-			//DrawSphere
-			//transformModel.rotate.y += 0.02f;
-			Matrix4x4 worldSphereMatrix = MakeAffineMatrix(transformModel.scale, transformModel.rotate, transformModel.translate);
-			//Matrix4x4 sphereInverseMatrix = Inverse(worldSphereMatrix);
-			Matrix4x4 sphereProjectionMatrix = MakePerspectiveFovMatrix(0.45f, float(kClientWidth) / float(kClientHeight), 0.1f, 100.0f);
-			Matrix4x4 sphereViewProjectionMatrix = Multiply(worldSphereMatrix, sphereProjectionMatrix);
-			
-			Matrix4x4 wvpMatrixSphere = Multiply(worldSphereMatrix, Multiply(viewMatrix, projectionMatrix));
-			modelTransformData->WVP = wvpMatrixSphere;
-			modelTransformData->World = worldSphereMatrix;
+			Matrix4x4 projectionMatrix = MakePerspectiveFovMatrix(0.45f,
+				float(kClientWidth) / float(kClientHeight), 0.1f, 100.0f);
+
+			// ========== NEW: update both models ==========
+			for (int i = 0; i < 2; ++i) {
+				Matrix4x4 world = MakeAffineMatrix(
+					transformModel[i].scale,
+					transformModel[i].rotate,
+					transformModel[i].translate);
+
+				modelTransformData[i]->WVP = Multiply(world, Multiply(viewMatrix, projectionMatrix));
+				modelTransformData[i]->World = world;
+			}
 			
 			//UV Transform
 		
 			materialSpriteData->uvTransform = MakeUVTransformMatrix(uvTransformSprite);
 
 			//if (Input::GetInstance()->TriggerKey(DIK_SPACE))
-			SoundPlayWave(xAudio2.Get(), soundData1);
+			//SoundPlayWave(xAudio2.Get(), soundData1);
 
 			
-			BYTE key[256] = {};
-			if (key[DIK_0]) {
-				OutputDebugStringA("Hit 0\n");
-			}
+			//BYTE key[256] = {};
+			//if (key[DIK_0]) {
+			//	OutputDebugStringA("Hit 0\n");
+			//}
 
 			//key input (Trigger) process
 			//bool is the key being pressed? (uint8_t [key #]
@@ -2012,76 +2045,65 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 #ifdef USE_IMGUI
 			//ImGui::ShowDemoWindow();
 
-			ImGui::Begin("Model Editor");
-			ImGui::Checkbox("Show 2D Sprite", &showSprite);
-
+			ImGui::Begin("Editor");
+			//ImGui::Checkbox("Show 2D Sprite", &showSprite);
+			//ImGui::Checkbox("Show Model 1", &showModel1);
+			//ImGui::Checkbox("Show Model 2", &showModel2);
 			ImGui::Separator();
-			ImGui::Text("Model 1 Selection");
-			ImGui::Combo("Select Model", &selectModel, modelNames, IM_ARRAYSIZE(modelNames));
-			ImGui::Combo("Texture for this model", &modelTexture[selectModel], textureNames, IM_ARRAYSIZE(textureNames));
-			
-			ImGui::Separator();
-			ImGui::Text("Color RGB (Shared)");
-			if (ImGui::ColorEdit3("Texture Color", &materialSpriteData->color.x)) {}
-
-			ImGui::Separator();
-			ImGui::Text("SRT Transform");
-			// Scale
-			ImGui::DragFloat3("Scale", &transformModel.scale.x, 0.01f, 0.1f, 10.0f);
-			// Rotation
-			ImGui::DragFloat3("Rotation", &transformModel.rotate.x, 0.03f, -10.0f, 10.0f);
-			// Translation
-			ImGui::DragFloat3("Position", &transformModel.translate.x, 0.01f, -10.0f, 10.0f);
-			// Reset
-			if (ImGui::Button("Reset Transform")) {
-				transformModel.scale = { 1.0f, 1.0f, 1.0f };
-				transformModel.rotate = { 0.0f, 0.0f, 0.0f };
-				transformModel.translate = { 0.0f, 0.0f, 5.0f };
-			}
-
-			ImGui::Separator();
-			ImGui::Text("Model 2 Selection");
-			ImGui::Combo("Select Model", &selectModel, modelNames, IM_ARRAYSIZE(modelNames));
-			ImGui::Combo("Texture for this model", &modelTexture[selectModel], textureNames, IM_ARRAYSIZE(textureNames));
-
-			ImGui::Separator();
-			ImGui::Text("Color RGB (Shared)");
-			if (ImGui::ColorEdit3("Texture Color", &materialSpriteData->color.x)) {}
-
-			ImGui::Separator();
-			ImGui::Text("SRT Transform");
-			// Scale
-			ImGui::DragFloat3("Scale", &transformModel.scale.x, 0.01f, 0.1f, 10.0f);
-			// Rotation
-			ImGui::DragFloat3("Rotation", &transformModel.rotate.x, 0.03f, -10.0f, 10.0f);
-			// Translation
-			ImGui::DragFloat3("Position", &transformModel.translate.x, 0.01f, -10.0f, 10.0f);
-			// Reset
-			if (ImGui::Button("Reset Transform")) {
-				transformModel.scale = { 1.0f, 1.0f, 1.0f };
-				transformModel.rotate = { 0.0f, 0.0f, 0.0f };
-				transformModel.translate = { 0.0f, 0.0f, 5.0f };
-			}
-			ImGui::End();
-
-			ImGui::Begin("Debug Camera, UV Transform, and Lighting");
-			ImGui::Separator();
-			ImGui::Checkbox("useDebugCamera", &useDebugCamera);
-			ImGui::Text("Camera Mode: %s", useDebugCamera ? "DEBUG CAMERA (SPACE to toggle)" : "Regular Camera (SPACE to toggle)");
-			if (ImGui::Button("Reset Debug Camera")) {
-				debugCamera.Initialize();
-			}
-
-			ImGui::Separator();
-			ImGui::Text("UV Transform (Shared)");
+			ImGui::Text("UV Transform (Shared to Model and Sprite)");
 			// UV Transform
-			ImGui::DragFloat2("UVTranslate", &uvTransformSprite.translate.x, 0.01f, -10.0f, 10.0f);
 			ImGui::DragFloat2("UVScale", &uvTransformSprite.scale.x, 0.01f, -10.0f, 10.0f);
 			ImGui::SliderAngle("UVRotate", &uvTransformSprite.rotate.z);
+			ImGui::DragFloat2("UVTranslate", &uvTransformSprite.translate.x, 0.01f, -10.0f, 10.0f);
 			if (ImGui::Button("Reset UV Transform")) {
 				uvTransformSprite.scale = { 1.0f, 1.0f, 1.0f };
 				uvTransformSprite.rotate = { 0.0f, 0.0f, 0.0f };
 				uvTransformSprite.translate = { 0.0f, 0.0f, 0.0f };
+			}
+			ImGui::Separator();
+			ImGui::Checkbox("Enable Sprite", &showSprite);
+			// --------- Sprite (visible when enabled) -------
+			if (showSprite) {
+				ImGui::Text("2D Sprite");
+				ImGui::DragFloat3("Scale", &transformSprite.scale.x, 0.01f, 0.1f, 10.0f);
+				ImGui::DragFloat3("Rotation", &transformSprite.rotate.x, 0.03f, -10.0f, 10.0f);
+				if (ImGui::Button("Reset Transform")) {
+					transformSprite = { {1,1,1}, {0,0,0}, {0,0,0} };
+				}
+			}
+			ImGui::Separator();
+			// ----- Model 1 (always visible) -----
+			ImGui::Checkbox("Enable Model 1", &showModel1);
+
+			if (showModel1) {
+				ImGui::PushID(0);
+				ImGui::Text("Model 1");
+				ImGui::Combo("Select Model", &selectModel[0], modelNames, IM_ARRAYSIZE(modelNames));
+				ImGui::Combo("Texture", &modelTexture[0][selectModel[0]], textureNames, IM_ARRAYSIZE(textureNames));
+				ImGui::DragFloat3("Scale", &transformModel[0].scale.x, 0.01f, 0.1f, 10.0f);
+				ImGui::DragFloat3("Rotation", &transformModel[0].rotate.x, 0.03f, -10.0f, 10.0f);
+				ImGui::DragFloat3("Position", &transformModel[0].translate.x, 0.01f, -10.0f, 10.0f);
+				if (ImGui::Button("Reset Transform")) {
+					transformModel[0] = { {1,1,1}, {0,0,0}, {2,0,5} };
+				}
+				ImGui::PopID();
+			}
+			ImGui::Separator();
+			// ----- Model 2 (only when active) -----
+			ImGui::Checkbox("Enable Model 2", &showModel2);
+
+			if (showModel2) {
+				ImGui::PushID(1);
+				ImGui::Text("Model 2");
+				ImGui::Combo("Select Model", &selectModel[1], modelNames, IM_ARRAYSIZE(modelNames));
+				ImGui::Combo("Texture", &modelTexture[1][selectModel[1]], textureNames, IM_ARRAYSIZE(textureNames));
+				ImGui::DragFloat3("Scale", &transformModel[1].scale.x, 0.01f, 0.1f, 10.0f);
+				ImGui::DragFloat3("Rotation", &transformModel[1].rotate.x, 0.03f, -10.0f, 10.0f);
+				ImGui::DragFloat3("Position", &transformModel[1].translate.x, 0.01f, -10.0f, 10.0f);
+				if (ImGui::Button("Reset Transform")) {
+					transformModel[1] = { {1,1,1}, {0,0,0}, {-2,0,5} };
+				}
+				ImGui::PopID();
 			}
 			ImGui::Separator();
 			ImGui::Checkbox("enableLighting", &isLight);
@@ -2091,17 +2113,34 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			else {
 				materialSpriteData->enableLighting = 0;
 			}
+			const char* lightingModes[] = { "Lambert", "Half-Lambert" };
+			ImGui::Combo("Lighting Mode", &materialSpriteData->lightingMode, lightingModes, IM_ARRAYSIZE(lightingModes));
+
+			//if (materialSpriteData->lightingMode == 1) {
+			//	ImGui::DragFloat("HalfLambert Power", &materialSpriteData->halfLambertPower, 0.05f, 0.5f, 8.0f);
+			//}
 			if (ImGui::ColorEdit3("LightColor", &directionalLightData->color.x)) {}
 			ImGui::DragFloat3("LightDirection", &directionalLightData->direction.x, 0.01f, -10.0f, 10.0f);
 			ImGui::DragFloat("Intensity", &directionalLightData->intensity, 0.01f, 0.0f, 3.0f);
-			ImGui::DragFloat("HalfLambert Power", &halfLambertPower, 0.05f, 0.5f, 8.0f);
 			if (ImGui::Button("Reset Lighting")) {
 				materialSpriteData->color = { 1.0f, 1.0f, 1.0f, 1.0f };
 				directionalLightData->color = { 1.0f, 1.0f, 1.0f, 1.0f };
 				directionalLightData->direction = { 0.0f, -1.0f, 2.0f };
 				directionalLightData->intensity = 1.0f;
-				halfLambertPower = 2.0f;
+				materialSpriteData->lightingMode = 1;
+				materialSpriteData->halfLambertPower = 2.0f;
 			}
+			ImGui::Separator();
+			ImGui::Text("Debug Camera");
+			ImGui::Checkbox("useDebugCamera", &useDebugCamera);
+			ImGui::Separator();
+			ImGui::Text("Camera Mode: %s", useDebugCamera ? "DEBUG CAMERA" : "Regular Camera");
+			if (ImGui::Button("Reset Debug Camera")) {
+				debugCamera.Initialize();
+			}
+			ImGui::Separator();
+			ImGui::Text("DEBUG CAMERA CONTROLS (MOUSE/KEYBOARD)");
+			ImGui::Text("SPACE = Toggle Sound\nW = forward\nS = backward\nA = left\nD = right\nQ = down\nE = up\nMouse Scroll = forward/backward\nLeft Click = drag camera\nRight Click = rotate (Z-axis)");
 
 			ImGui::End();
 
@@ -2136,24 +2175,32 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			// Material and Texture are shared
 			commandList->SetGraphicsRootConstantBufferView(1, materialResourceSprite->GetGPUVirtualAddress());
 			commandList->SetGraphicsRootConstantBufferView(3, materialResourceLight->GetGPUVirtualAddress());
-			commandList->SetGraphicsRootDescriptorTable(2, textureHandles[modelTexture[selectModel]]);
+			//commandList->SetGraphicsRootDescriptorTable(2, textureHandles[modelTexture[selectModel]]);
 			
 			//// 2. ModelData
-			commandList->SetGraphicsRootConstantBufferView(0, modelWVPResource->GetGPUVirtualAddress());
-
-			commandList->IASetVertexBuffers(0, 1, &modelVertexBufferViews[selectModel]);
-			commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-			commandList->DrawInstanced(
-				UINT(modelData[selectModel].vertices.size()), 1, 0, 0);
+			if (showModel1) {
+				commandList->SetGraphicsRootConstantBufferView(0, modelWVPResource[0]->GetGPUVirtualAddress());
+				commandList->SetGraphicsRootDescriptorTable(2, textureHandles[modelTexture[0][selectModel[0]]]); // adjust index if needed
+				commandList->IASetVertexBuffers(0, 1, &modelVertexBufferViews[selectModel[0]]);
+				commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+				commandList->DrawInstanced(UINT(modelData[selectModel[0]].vertices.size()), 1, 0, 0);
+			}
+			if (showModel2) {
+				commandList->SetGraphicsRootConstantBufferView(0, modelWVPResource[1]->GetGPUVirtualAddress());
+				commandList->SetGraphicsRootDescriptorTable(2, textureHandles[modelTexture[1][selectModel[1]]]); // adjust index if needed
+				commandList->IASetVertexBuffers(0, 1, &modelVertexBufferViews[selectModel[1]]);
+				commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+				commandList->DrawInstanced(UINT(modelData[selectModel[1]].vertices.size()), 1, 0, 0);
+			}
 
 			//// 3. Draw Sprite - Orthographic (2D overlay)
 			if (showSprite) {
 				commandList->SetGraphicsRootConstantBufferView(0, transformationMatrixResourceSprite->GetGPUVirtualAddress());
-				commandList->SetGraphicsRootDescriptorTable(2, textureHandles[modelTexture[selectModel]]);
+				commandList->SetGraphicsRootDescriptorTable(2, textureHandles[modelTexture[0][selectModel[0]]]);
 				commandList->IASetVertexBuffers(0, 1, &vertexBufferViewSprite);
 				commandList->IASetIndexBuffer(&indexBufferViewSprite);
 				commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-				commandList->DrawIndexedInstanced(6, 1, 0, 0, 0);
+				commandList->DrawInstanced(6, 1, 0, 0);
 			}
 			
 		#ifdef USE_IMGUI
@@ -2201,11 +2248,16 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	CloseHandle(fenceEvent);
 
 	SoundUnload(&soundData1);
+	if (pSourceVoice) {
+		pSourceVoice->Stop(0);
+		pSourceVoice->DestroyVoice();
+		pSourceVoice = nullptr;
+	}
 
 	xAudio2.Reset();
 
 #ifdef _DEBUG
-	//debugController->Release();
+	debugController->Release();
 #endif
 
 	if (mouse) mouse->Release();

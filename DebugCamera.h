@@ -54,7 +54,12 @@ private:
 
 	float yaw_ = 0.0f;
 	float pitch_ = 0.0f;
+	//float targetYaw_ = 0.0f;
+	//float targetPitch_ = 0.0f;
 	float pivot_ = 0.0f;
+
+	//float mouseSensitivity_ = 0.003f;
+	//float smoothFactor_ = 12.0f;
 
 	float mouseDeltaX_ = 0.0f;
 	float mouseDeltaY_ = 0.0f;

@@ -15,6 +15,7 @@ void DebugCamera::Initialize()
 
 void DebugCamera::Update()
 {
+
 	Vector3 move = { 0.0f, 0.0f, 0.0f }; //default movement
 	
 	extern BYTE gKeys[256];
