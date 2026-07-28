@@ -177,28 +177,50 @@ ModelData LoadObjFile(const std::string& directoryPath, const std::string& filen
 		else if (identifier == "f") {
 			//Triangle only (use something else for other shapes)
 			VertexData triangle[3];
+			int validVertices = 0;
 			
 			for (int32_t faceVertex = 0; faceVertex < 3; ++faceVertex) {
 				std::string vertexDefinition;
-				s >> vertexDefinition;
+
+				if (!(s >> vertexDefinition)) break;   // not enough tokens
+
 				//[position/UV/Vector]
 				std::istringstream v(vertexDefinition);
-				uint32_t elementIndices[3];
+				uint32_t elementIndices[3] = { 0,0,0 };
+
 				for (int32_t element = 0; element < 3; ++element) {
 					std::string index;
 					std::getline(v, index, '/');
-					elementIndices[element] = std::stoi(index);
+					if (!index.empty()) {
+						try {
+							elementIndices[element] = static_cast<uint32_t>(std::stoi(index));
+						}
+						catch (...) {
+							elementIndices[element] = 0;
+						}
+					}
+				}
+				if (elementIndices[0] == 0 || elementIndices[0] > positions.size()) {
+					continue;   // skip this vertex
 				}
 				// Load vertices, normals, texture coordinates, and material data from the OBJ file
 				Vector4 position = positions[elementIndices[0] - 1];
 				position.x *= 1.0f;
-				Vector2 texcoord = texcoords[elementIndices[1] - 1];
-				texcoord.y = 1.0f - texcoord.y; /// Draw texture upside down
-				Vector3 normal = normals[elementIndices[2] - 1];
-				normal.x *= -1.0f;
+
+				Vector2 texcoord = { 0.0f, 0.0f };
+				if (elementIndices[1] > 0 && elementIndices[1] <= texcoords.size()) {
+					texcoord = texcoords[elementIndices[1] - 1];
+					texcoord.y = 1.0f - texcoord.y; // flip V
+				}
+
+				Vector3 normal = { 0.0f, 0.0f, 1.0f };
+				if (elementIndices[2] > 0 && elementIndices[2] <= normals.size()) {
+					normal = normals[elementIndices[2] - 1];
+					normal.x *= -1.0f; // keep your existing flip
+				}
 				VertexData vertex = { position, texcoord, normal };
 				modelData.vertices.push_back(vertex);
-				triangle[faceVertex] = { position, texcoord, normal };
+				triangle[faceVertex] = vertex;
 			}
 			modelData.vertices.push_back(triangle[2]);
 			modelData.vertices.push_back(triangle[1]);
@@ -1175,7 +1197,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	Microsoft::WRL::ComPtr<ID3D12Debug1> debugController = nullptr;
 	if (SUCCEEDED(D3D12GetDebugInterface(IID_PPV_ARGS(&debugController)))) {
 		debugController->EnableDebugLayer();
-		debugController->SetEnableGPUBasedValidation(TRUE);
+		//debugController->SetEnableGPUBasedValidation(TRUE);
 	}
 #endif
 
@@ -1343,6 +1365,8 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	assert(SUCCEEDED(hr));
 
 	///------------Load Textures ----------------
+
+
 	DirectX::ScratchImage mipImages = LoadTexture("Resources/uvChecker.png");
 	const DirectX::TexMetadata& metadata0 = mipImages.GetMetadata();
 	Microsoft::WRL::ComPtr<ID3D12Resource> textureResource0 = CreateTextureResource(device, metadata0);
@@ -1354,10 +1378,15 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	Microsoft::WRL::ComPtr<ID3D12Resource> intermediateResource1 = UploadTextureData(textureResource1.Get(), mipImages1, device.Get(), commandList.Get());
 
 	DirectX::ScratchImage mipImages2 = LoadTexture("Resources/sample.png");
-	//DirectX::ScratchImage mipImages2 = LoadTexture(modelData.material.textureFilePath);
 	const DirectX::TexMetadata& metadata2 = mipImages2.GetMetadata();
 	Microsoft::WRL::ComPtr<ID3D12Resource> textureResource2 = CreateTextureResource(device, metadata2);
 	Microsoft::WRL::ComPtr<ID3D12Resource> intermediateResource2 = UploadTextureData(textureResource2.Get(), mipImages2, device.Get(), commandList.Get());
+
+	DirectX::ScratchImage mipImages3 = LoadTexture("Resources/grid.png");
+	const DirectX::TexMetadata& metadata3 = mipImages3.GetMetadata();
+	Microsoft::WRL::ComPtr<ID3D12Resource> textureResource3 = CreateTextureResource(device, metadata3);
+	Microsoft::WRL::ComPtr<ID3D12Resource> intermediateResource3 = UploadTextureData(textureResource3.Get(), mipImages3, device.Get(), commandList.Get());
+
 
 	//--------------Load Texture end --------------
 
@@ -1747,7 +1776,6 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		modelWVPResource[i]->Map(0, nullptr, reinterpret_cast<void**>(&modelTransformData[i]));
 	}
 
-
 	//-------------------Make model data *end*
 
 	//Pull Resources from Swap Chain (create rtv)
@@ -1786,6 +1814,12 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	srvDesc2.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
 	srvDesc2.Texture2D.MipLevels = UINT(metadata2.mipLevels);
 
+	D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc3{};
+	srvDesc3.Format = metadata3.format;
+	srvDesc3.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+	srvDesc3.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+	srvDesc3.Texture2D.MipLevels = UINT(metadata3.mipLevels);
+
 	//Process screen Back Buffer to Front Buffer (Screen Swap)
 	UINT backBufferIndex = swapChain->GetCurrentBackBufferIndex();
 	D3D12_CPU_DESCRIPTOR_HANDLE dsvHandle = dsvDescriptorHeap->GetCPUDescriptorHandleForHeapStart();
@@ -1806,6 +1840,10 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	D3D12_GPU_DESCRIPTOR_HANDLE textureSrvHandleGPU2 = GetGPUDescriptorHandle(srvDescriptorHeap.Get(), descriptorSizeSRV, 3);
 	device->CreateShaderResourceView(textureResource2.Get(), &srvDesc2, textureSrvHandleCPU2);
 
+	D3D12_CPU_DESCRIPTOR_HANDLE textureSrvHandleCPU3 = GetCPUDescriptorHandle(srvDescriptorHeap.Get(), descriptorSizeSRV, 4);
+	D3D12_GPU_DESCRIPTOR_HANDLE textureSrvHandleGPU3 = GetGPUDescriptorHandle(srvDescriptorHeap.Get(), descriptorSizeSRV, 4);
+	device->CreateShaderResourceView(textureResource3.Get(), &srvDesc3, textureSrvHandleCPU3);
+
 	//
 	float clearColor[] = { 0.1f, 0.25f, 0.5f, 1.0f };
 
@@ -1818,33 +1856,38 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 	//////////----------select model and texture data -------------------
 	int selectModel[2] = { 0, 1 };
-	int modelTexture[2][5] = {
-		{ 0, 0, 0, 0, 0 },
-		{ 0, 0, 0, 0, 0 },
+	int modelTexture[2][8] = {
+		{ 0, 0, 0, 0, 0, 0, 0, 0 },
+		{ 0, 0, 0, 0, 0, 0, 0, 0 },
+	
 	};
 	WorldTransform transformModel[2] = {
 		{{ 1.0f, 1.0f, 1.0f}, { 0.0f, 0.0f, 0.0f }, {2.0f, 0.0f, 5.0f}},
 		{{ 1.0f, 1.0f, 1.0f}, { 0.0f, 0.0f, 0.0f }, {-2.0f, 0.0f, 5.0f}},
 		};
 
-	const char* modelNames[] = { "plane.obj", "multiMesh.obj", "axis.obj", "multiMaterial.obj" , "Sphere"};
-	const char* textureNames[] = { "uvChecker", "monsterball", "sample" };
+	const char* modelNames[] = { "plane.obj", "multiMesh.obj", "axis.obj", "multiMaterial.obj" , "Sphere.obj", "utah_teapot.obj", "bunny.obj", "suzanne.obj"};
+	const char* textureNames[] = { "uvChecker", "monsterball", "sample", "grid"};
 
-	D3D12_GPU_DESCRIPTOR_HANDLE textureHandles[] = {
+	D3D12_GPU_DESCRIPTOR_HANDLE textureHandles[5] = {
 		textureSrvHandleGPU0,
 		textureSrvHandleGPU1,
 		textureSrvHandleGPU2,
+		textureSrvHandleGPU3,
 	};
 
-	const int kModelCount = 5;
+	const int kModelCount = 8;
 
 	ModelData modelData[kModelCount]; 
 	modelData[0] = LoadObjFile("Resources", "plane.obj");			// [0] 2D PLANE
 	modelData[1] = LoadObjFile("Resources", "multiMesh.obj");		// [1] MULTI-MESH
 	modelData[2] = LoadObjFile("Resources", "axis.obj");			// [2] AXIS
 	modelData[3] = LoadObjFile("Resources", "multiMaterial.obj");	// [3] MULTI MATERIAL
+	modelData[5] = LoadObjFile("Resources", "utah_teapot.obj");		// [5] UTAH_TEAPOT
+	modelData[6] = LoadObjFile("Resources", "bunny.obj");			// [6] STANFORD_BUNNY
+	modelData[7] = LoadObjFile("Resources", "suzanne.obj");			// [7] SUZANNE
 		{
-			SphereMesh sphere = DrawSphere(16, 1);
+			SphereMesh sphere = DrawSphere(16, 1);					// [4] SPHERE
 			modelData[4].vertices = std::move(sphere.vertices);
 		}
 	
@@ -1853,8 +1896,18 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	D3D12_VERTEX_BUFFER_VIEW modelVertexBufferViews[kModelCount];
 
 	for (int i = 0; i < kModelCount; ++i) {
+
+		// Never create a zero-size buffer
+		size_t vertexCount = modelData[i].vertices.size();
+		if (vertexCount == 0) {
+			// keep the resource null / invalid so we can skip drawing later
+			modelVertexResources[i].Reset();
+			modelVertexBufferViews[i] = {};
+			continue;
+		}
+
 		modelVertexResources[i] = CreateBufferResource(
-			device, sizeof(VertexData) * modelData[i].vertices.size());
+			device, sizeof(VertexData) * vertexCount);
 
 		modelVertexBufferViews[i].BufferLocation =
 			modelVertexResources[i]->GetGPUVirtualAddress();
@@ -1915,6 +1968,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	ImGuiIO& io = ImGui::GetIO();
 	io.Fonts->Build();
 #endif
+
 
 	commandAllocator->Reset();
 	commandList->Reset(commandAllocator.Get(), nullptr);
@@ -2177,20 +2231,46 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			commandList->SetGraphicsRootConstantBufferView(3, materialResourceLight->GetGPUVirtualAddress());
 			//commandList->SetGraphicsRootDescriptorTable(2, textureHandles[modelTexture[selectModel]]);
 			
+
+			// ---- safety clamps (put this once, before the if(showModel1) / if(showModel2) )
+			const int numModels = IM_ARRAYSIZE(modelNames);  /* size of modelData / modelNames */
+			const int numTextures = IM_ARRAYSIZE(textureNames); /* size of textureHandles / textureNames */
+
+			auto Clamp = [](int v, int lo, int hi) { return v < lo ? lo : (v > hi ? hi : v); };
+
+			selectModel[0] = Clamp(selectModel[0], 0, numModels - 1);
+			selectModel[1] = Clamp(selectModel[1], 0, numModels - 1);
+
+			modelTexture[0][selectModel[0]] = Clamp(modelTexture[0][selectModel[0]], 0, numTextures - 1);
+			modelTexture[1][selectModel[1]] = Clamp(modelTexture[1][selectModel[1]], 0, numTextures - 1);
+
+
 			//// 2. ModelData
 			if (showModel1) {
-				commandList->SetGraphicsRootConstantBufferView(0, modelWVPResource[0]->GetGPUVirtualAddress());
-				commandList->SetGraphicsRootDescriptorTable(2, textureHandles[modelTexture[0][selectModel[0]]]); // adjust index if needed
-				commandList->IASetVertexBuffers(0, 1, &modelVertexBufferViews[selectModel[0]]);
-				commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-				commandList->DrawInstanced(UINT(modelData[selectModel[0]].vertices.size()), 1, 0, 0);
+				int idx = selectModel[0];
+				if (modelData[idx].vertices.size() > 0 && modelVertexResources[idx]) {
+					commandList->SetGraphicsRootConstantBufferView(0, modelWVPResource[0]->GetGPUVirtualAddress());
+					commandList->SetGraphicsRootDescriptorTable(2, textureHandles[modelTexture[0][idx]]);
+					commandList->IASetVertexBuffers(0, 1, &modelVertexBufferViews[idx]);
+					commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+					commandList->DrawInstanced(UINT(modelData[idx].vertices.size()), 1, 0, 0);
+				}
 			}
+
+			OutputDebugStringA(std::format("Model2 idx={} verts={} tex={}\n",
+				selectModel[1],
+				modelData[selectModel[1]].vertices.size(),
+				modelTexture[1][selectModel[1]]).c_str());
+
 			if (showModel2) {
-				commandList->SetGraphicsRootConstantBufferView(0, modelWVPResource[1]->GetGPUVirtualAddress());
-				commandList->SetGraphicsRootDescriptorTable(2, textureHandles[modelTexture[1][selectModel[1]]]); // adjust index if needed
-				commandList->IASetVertexBuffers(0, 1, &modelVertexBufferViews[selectModel[1]]);
-				commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-				commandList->DrawInstanced(UINT(modelData[selectModel[1]].vertices.size()), 1, 0, 0);
+				int idx = selectModel[1];
+				if (modelData[idx].vertices.size() > 0 && modelVertexResources[idx]) {
+					commandList->SetGraphicsRootConstantBufferView(0, modelWVPResource[1]->GetGPUVirtualAddress());
+					commandList->SetGraphicsRootDescriptorTable(2, textureHandles[modelTexture[1][idx]]);
+					commandList->IASetVertexBuffers(0, 1, &modelVertexBufferViews[idx]);
+					commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+					commandList->DrawInstanced(UINT(modelData[idx].vertices.size()), 1, 0, 0);
+				}
 			}
 
 			//// 3. Draw Sprite - Orthographic (2D overlay)
@@ -2202,6 +2282,12 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 				commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 				commandList->DrawInstanced(6, 1, 0, 0);
 			}
+
+			for (int i = 0; i < numTextures; ++i) {
+				OutputDebugStringA(std::format("textureHandles[{}] = 0x{:X}\n",
+					i, textureHandles[i].ptr).c_str());
+			}
+
 			
 		#ifdef USE_IMGUI
 			ImGui_ImplDX12_RenderDrawData(ImGui::GetDrawData(), commandList.Get());
@@ -2256,6 +2342,38 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 	xAudio2.Reset();
 
+
+	textureResource0.Reset();
+	textureResource1.Reset();
+	textureResource2.Reset();
+	textureResource3.Reset();
+	intermediateResource0->Release();
+	intermediateResource1->Release();
+	intermediateResource2->Release();
+	intermediateResource3->Release();
+
+	modelVertexResources->Reset();
+	
+	srvDescriptorHeap.Reset();
+	rtvDescriptorHeap.Reset();
+	dsvDescriptorHeap.Reset();
+	swapChain.Reset();
+	rootSignature.Reset();
+	graphicsPipelineState.Reset();
+
+	vertexResourceSprite.Reset();
+	indexResourceSprite.Reset();
+	modelVertexResources->Reset();
+	modelWVPResource->Reset();
+	materialResource.Reset();
+
+	commandList.Reset();
+	commandAllocator.Reset();
+	commandQueue.Reset();
+	fence.Reset();
+
+	device.Reset();
+
 #ifdef _DEBUG
 	debugController->Release();
 #endif
@@ -2264,16 +2382,23 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	if (keyboard) keyboard->Release();
 	if (directInput) directInput->Release();
 
+
 	CoUninitialize();
 	CloseWindow(hwnd);
 
+//#ifdef _DEBUG
+//	Microsoft::WRL::ComPtr<IDXGIDebug1> debug;
+//	if (SUCCEEDED(DXGIGetDebugInterface1(0, IID_PPV_ARGS(&debug)))) {
+//		debug->ReportLiveObjects(DXGI_DEBUG_ALL, DXGI_DEBUG_RLO_ALL);
+//		debug->ReportLiveObjects(DXGI_DEBUG_APP, DXGI_DEBUG_RLO_ALL);
+//		debug->ReportLiveObjects(DXGI_DEBUG_D3D12, DXGI_DEBUG_RLO_ALL);
+//		debug->Release();
+//	}
+//#endif
 #ifdef _DEBUG
-	Microsoft::WRL::ComPtr<IDXGIDebug1> debug;
-	if (SUCCEEDED(DXGIGetDebugInterface1(0, IID_PPV_ARGS(&debug)))) {
-		debug->ReportLiveObjects(DXGI_DEBUG_ALL, DXGI_DEBUG_RLO_ALL);
-		debug->ReportLiveObjects(DXGI_DEBUG_APP, DXGI_DEBUG_RLO_ALL);
-		debug->ReportLiveObjects(DXGI_DEBUG_D3D12, DXGI_DEBUG_RLO_ALL);
-		debug->Release();
+	Microsoft::WRL::ComPtr<IDXGIDebug1> dxgiDebug;
+	if (SUCCEEDED(DXGIGetDebugInterface1(0, IID_PPV_ARGS(&dxgiDebug)))) {
+		dxgiDebug->ReportLiveObjects(DXGI_DEBUG_ALL, DXGI_DEBUG_RLO_DETAIL);
 	}
 #endif
 	return 0;
