@@ -1193,13 +1193,13 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	///------SOUND DATA END----------
 
 	//Debug Layer
-#ifdef _DEBUG
-	Microsoft::WRL::ComPtr<ID3D12Debug1> debugController = nullptr;
-	if (SUCCEEDED(D3D12GetDebugInterface(IID_PPV_ARGS(&debugController)))) {
-		debugController->EnableDebugLayer();
-		//debugController->SetEnableGPUBasedValidation(TRUE);
-	}
-#endif
+//ifdef _DEBUG
+//	Microsoft::WRL::ComPtr<ID3D12Debug1> debugController = nullptr;
+//	if (SUCCEEDED(D3D12GetDebugInterface(IID_PPV_ARGS(&debugController)))) {
+//		debugController->EnableDebugLayer();
+//		//debugController->SetEnableGPUBasedValidation(TRUE);
+//	}
+//endif
 
 	WNDCLASS wc{};
 
@@ -1287,9 +1287,9 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 #ifdef _DEBUG
 	Microsoft::WRL::ComPtr<ID3D12InfoQueue> infoQueue = nullptr;
 	if (SUCCEEDED(device->QueryInterface(IID_PPV_ARGS(&infoQueue)))) {
-		//infoQueue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_CORRUPTION, true);
-		//infoQueue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_ERROR, true);
-		//infoQueue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_WARNING, true);
+		infoQueue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_CORRUPTION, true);
+		infoQueue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_ERROR, true);
+		infoQueue->SetBreakOnSeverity(D3D12_MESSAGE_SEVERITY_WARNING, true);
 		D3D12_MESSAGE_ID denyIds[] = {
 			D3D12_MESSAGE_ID_RESOURCE_BARRIER_MISMATCHING_COMMAND_LIST_TYPE
 		};
@@ -1382,10 +1382,15 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	Microsoft::WRL::ComPtr<ID3D12Resource> textureResource2 = CreateTextureResource(device, metadata2);
 	Microsoft::WRL::ComPtr<ID3D12Resource> intermediateResource2 = UploadTextureData(textureResource2.Get(), mipImages2, device.Get(), commandList.Get());
 
-	DirectX::ScratchImage mipImages3 = LoadTexture("Resources/grid.png");
+	DirectX::ScratchImage mipImages3 = LoadTexture("Resources/checkerboard.png");
 	const DirectX::TexMetadata& metadata3 = mipImages3.GetMetadata();
 	Microsoft::WRL::ComPtr<ID3D12Resource> textureResource3 = CreateTextureResource(device, metadata3);
 	Microsoft::WRL::ComPtr<ID3D12Resource> intermediateResource3 = UploadTextureData(textureResource3.Get(), mipImages3, device.Get(), commandList.Get());
+
+	DirectX::ScratchImage mipImages4 = LoadTexture("Resources/grid.png");
+	const DirectX::TexMetadata& metadata4 = mipImages4.GetMetadata();
+	Microsoft::WRL::ComPtr<ID3D12Resource> textureResource4 = CreateTextureResource(device, metadata4);
+	Microsoft::WRL::ComPtr<ID3D12Resource> intermediateResource4 = UploadTextureData(textureResource4.Get(), mipImages4, device.Get(), commandList.Get());
 
 
 	//--------------Load Texture end --------------
@@ -1644,55 +1649,6 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 	
 
-	////VertexBufferView
-	//ID3D12Resource* vertexResource = CreateBufferResource(device, sizeof(VertexData) * 6);
-	//vertexResource->SetName(L"vertexResource");
-	//assert(SUCCEEDED(hr));
-	//
-	//D3D12_VERTEX_BUFFER_VIEW vertexBufferView{};
-	//vertexBufferView.BufferLocation = vertexResource->GetGPUVirtualAddress();
-	//vertexBufferView.SizeInBytes = sizeof(VertexData) * 6;
-	//vertexBufferView.StrideInBytes = sizeof(VertexData);
-	//
-	////Resource data overwrite
-	//VertexData* vertexData = nullptr;
-	//vertexResource->Map(0, nullptr, reinterpret_cast<void**>(&vertexData));
-	//vertexData[0].position = { -0.5f, -0.5f, 0.0f, 1.0f };
-	//vertexData[0].texcoord = { 0.0f, 1.0f };
-	//vertexData[0].normal.x = vertexData[0].position.x;
-	//vertexData[0].normal.y = vertexData[0].position.y;
-	//vertexData[0].normal.z = vertexData[0].position.z;
-	//
-	//vertexData[1].position = { 0.0f, 0.5f, 0.0f, 1.0f };
-	//vertexData[1].texcoord = { 0.5f, 0.0f };
-	//vertexData[1].normal.x = vertexData[1].position.x;
-	//vertexData[1].normal.y = vertexData[1].position.y;
-	//vertexData[1].normal.z = vertexData[1].position.z;
-	//
-	//vertexData[2].position = { 0.5f, -0.5f, 0.0f, 1.0f };
-	//vertexData[2].texcoord = { 1.0f, 1.0f };
-	//vertexData[2].normal.x = vertexData[2].position.x;
-	//vertexData[2].normal.y = vertexData[2].position.y;
-	//vertexData[2].normal.z = vertexData[2].position.z;
-	//
-	//vertexData[3].position = { -0.5f, -0.5f, 0.5f, 1.0f }; //same as vertexData[0] but different z value
-	//vertexData[3].texcoord = { 0.0f, 1.0f };
-	//vertexData[3].normal.x = vertexData[3].position.x;
-	//vertexData[3].normal.y = vertexData[3].position.y;
-	//vertexData[3].normal.z = vertexData[3].position.z;
-	//
-	//vertexData[4].position = { 0.0f, 0.0f, 0.0f, 1.0f }; //same as vertexData[1] but different y value
-	//vertexData[4].texcoord = { 0.5f, 0.0f };
-	//vertexData[4].normal.x = vertexData[4].position.x;
-	//vertexData[4].normal.y = vertexData[4].position.y;
-	//vertexData[4].normal.z = vertexData[4].position.z;
-	//
-	//vertexData[5].position = { 0.5f, -0.5f, -0.5f, 1.0f }; //same as vertexData[2] but different z value
-	//vertexData[5].texcoord = { 1.0f, 1.0f };
-	//vertexData[5].normal.x = vertexData[5].position.x;
-	//vertexData[5].normal.y = vertexData[5].position.y;
-	//vertexData[5].normal.z = vertexData[5].position.z;
-
 	//Viewport and Scissor
 	D3D12_VIEWPORT viewport{};
 	viewport.Width = kClientWidth;
@@ -1820,6 +1776,12 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	srvDesc3.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
 	srvDesc3.Texture2D.MipLevels = UINT(metadata3.mipLevels);
 
+	D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc4{};
+	srvDesc4.Format = metadata4.format;
+	srvDesc4.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+	srvDesc4.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+	srvDesc4.Texture2D.MipLevels = UINT(metadata3.mipLevels);
+
 	//Process screen Back Buffer to Front Buffer (Screen Swap)
 	UINT backBufferIndex = swapChain->GetCurrentBackBufferIndex();
 	D3D12_CPU_DESCRIPTOR_HANDLE dsvHandle = dsvDescriptorHeap->GetCPUDescriptorHandleForHeapStart();
@@ -1844,6 +1806,10 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	D3D12_GPU_DESCRIPTOR_HANDLE textureSrvHandleGPU3 = GetGPUDescriptorHandle(srvDescriptorHeap.Get(), descriptorSizeSRV, 4);
 	device->CreateShaderResourceView(textureResource3.Get(), &srvDesc3, textureSrvHandleCPU3);
 
+	D3D12_CPU_DESCRIPTOR_HANDLE textureSrvHandleCPU4 = GetCPUDescriptorHandle(srvDescriptorHeap.Get(), descriptorSizeSRV, 5);
+	D3D12_GPU_DESCRIPTOR_HANDLE textureSrvHandleGPU4 = GetGPUDescriptorHandle(srvDescriptorHeap.Get(), descriptorSizeSRV, 5);
+	device->CreateShaderResourceView(textureResource4.Get(), &srvDesc4, textureSrvHandleCPU4);
+
 	//
 	float clearColor[] = { 0.1f, 0.25f, 0.5f, 1.0f };
 
@@ -1867,13 +1833,15 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		};
 
 	const char* modelNames[] = { "plane.obj", "multiMesh.obj", "axis.obj", "multiMaterial.obj" , "Sphere.obj", "utah_teapot.obj", "bunny.obj", "suzanne.obj"};
-	const char* textureNames[] = { "uvChecker", "monsterball", "sample", "grid"};
+	const char* textureNames[] = { "uvChecker", "monsterball", "sample", "checkerboard", "grid"};
 
 	D3D12_GPU_DESCRIPTOR_HANDLE textureHandles[5] = {
 		textureSrvHandleGPU0,
 		textureSrvHandleGPU1,
 		textureSrvHandleGPU2,
 		textureSrvHandleGPU3,
+		textureSrvHandleGPU4,
+
 	};
 
 	const int kModelCount = 8;
@@ -2343,48 +2311,75 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	xAudio2.Reset();
 
 
+	if (commandQueue && fence) {
+		fenceValue++;
+		commandQueue->Signal(fence.Get(), fenceValue);
+		if (fence->GetCompletedValue() < fenceValue) {
+			fence->SetEventOnCompletion(fenceValue, fenceEvent);
+			WaitForSingleObject(fenceEvent, INFINITE);
+		}
+	}
+
+	// ---- Explicit ComPtr::Reset (order roughly reverse of creation) ----
+	for (int i = 0; i < kModelCount; ++i)
+		modelVertexResources[i].Reset();
+
+	for (int i = 0; i < 2; ++i)
+		modelWVPResource[i].Reset();
+
+	vertexResourceSprite.Reset();
+	indexResourceSprite.Reset();
+	transformationMatrixResourceSprite.Reset();
+	wvpResource.Reset();
+	materialResource.Reset();
+	materialResourceSprite.Reset();
+	materialResourceLight.Reset();
+
+	intermediateResource0.Reset();
+	intermediateResource1.Reset();
+	intermediateResource2.Reset();
+	intermediateResource3.Reset();
+	intermediateResource4.Reset();
+
 	textureResource0.Reset();
 	textureResource1.Reset();
 	textureResource2.Reset();
 	textureResource3.Reset();
-	intermediateResource0->Release();
-	intermediateResource1->Release();
-	intermediateResource2->Release();
-	intermediateResource3->Release();
+	textureResource4.Reset();
 
-	modelVertexResources->Reset();
-	
+	depthStencilResource.Reset();
+	swapChainResources[0].Reset();
+	swapChainResources[1].Reset();
+
 	srvDescriptorHeap.Reset();
 	rtvDescriptorHeap.Reset();
 	dsvDescriptorHeap.Reset();
-	swapChain.Reset();
-	rootSignature.Reset();
-	graphicsPipelineState.Reset();
 
-	vertexResourceSprite.Reset();
-	indexResourceSprite.Reset();
-	modelVertexResources->Reset();
-	modelWVPResource->Reset();
-	materialResource.Reset();
+	graphicsPipelineState.Reset();
+	rootSignature.Reset();
 
 	commandList.Reset();
 	commandAllocator.Reset();
 	commandQueue.Reset();
 	fence.Reset();
 
-	device.Reset();
+	swapChain.Reset();          
+	device.Reset();             // last
 
-#ifdef _DEBUG
-	debugController->Release();
-#endif
+	// ---- Input ----
+	if (mouse) { mouse->Unacquire(); mouse->Release(); mouse = nullptr; }
+	if (keyboard) { keyboard->Unacquire(); keyboard->Release(); keyboard = nullptr; }
+	if (directInput) { directInput->Release(); directInput = nullptr; }
 
-	if (mouse) mouse->Release();
-	if (keyboard) keyboard->Release();
-	if (directInput) directInput->Release();
+	// DXC objects 
+	if (includeHandler) includeHandler->Release();
+	if (dxcCompiler)    dxcCompiler->Release();
+	if (dxcUtils)       dxcUtils->Release();
+	if (vertexShaderBlob) vertexShaderBlob->Release();
+	if (pixelShaderBlob)  pixelShaderBlob->Release();
+	if (signatureBlob)    signatureBlob->Release();
+	if (errorBlob)        errorBlob->Release();
 
-
-	CoUninitialize();
-	CloseWindow(hwnd);
 
 //#ifdef _DEBUG
 //	Microsoft::WRL::ComPtr<IDXGIDebug1> debug;
@@ -2395,12 +2390,20 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 //		debug->Release();
 //	}
 //#endif
-#ifdef _DEBUG
-	Microsoft::WRL::ComPtr<IDXGIDebug1> dxgiDebug;
-	if (SUCCEEDED(DXGIGetDebugInterface1(0, IID_PPV_ARGS(&dxgiDebug)))) {
-		dxgiDebug->ReportLiveObjects(DXGI_DEBUG_ALL, DXGI_DEBUG_RLO_DETAIL);
-	}
-#endif
+//
+//#ifdef _DEBUG
+//	debugController->Release();
+//#endif
+//#ifdef _DEBUG
+//	Microsoft::WRL::ComPtr<IDXGIDebug1> dxgiDebug;
+//	if (SUCCEEDED(DXGIGetDebugInterface1(0, IID_PPV_ARGS(&dxgiDebug)))) {
+//		dxgiDebug->ReportLiveObjects(DXGI_DEBUG_ALL, DXGI_DEBUG_RLO_DETAIL);
+//	}
+//#endif
+
+	CoUninitialize();
+	CloseWindow(hwnd);
+
 	return 0;
 }
 
