@@ -22,12 +22,14 @@
 //#define DIRECTINPUT_VERSION	0x800
 #include <dinput.h>
 #include <wrl.h>
+
 #ifdef USE_IMGUI
 #include "externals/imgui/imgui.h"
 #include "externals/imgui/imgui_impl_dx12.h"
 #include "externals/imgui/imgui_impl_win32.h"
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 #endif
+
 
 #pragma comment(lib, "xaudio2.lib")
 
@@ -136,6 +138,66 @@ struct SphereMesh {
 float pi = 3.14f;
 
 bool useDebugCamera = false;
+
+enum BlendMode {
+	kBlendModeNone,
+	kBlendModeNormal,
+	kBlendModeAdd,
+	kBlendModeSubtract,
+	kBlendModeMultiply,
+	kBlendModeScreen,
+	kCountOfBlendMode,
+};
+
+D3D12_BLEND_DESC CreateBlendDesc(int mode) {
+	D3D12_BLEND_DESC desc{};
+	desc.RenderTarget[0].RenderTargetWriteMask = D3D12_COLOR_WRITE_ENABLE_ALL;
+	desc.RenderTarget[0].BlendEnable = TRUE;
+
+	// Default alpha channel
+	desc.RenderTarget[0].SrcBlendAlpha = D3D12_BLEND_ONE;
+	desc.RenderTarget[0].BlendOpAlpha = D3D12_BLEND_OP_ADD;
+	desc.RenderTarget[0].DestBlendAlpha = D3D12_BLEND_ZERO;
+
+	switch (mode)
+	{
+	case kBlendModeNone:
+		desc.RenderTarget[0].BlendEnable = FALSE;
+		break;
+
+	case kBlendModeNormal:          // normal alpha blending
+		desc.RenderTarget[0].SrcBlend = D3D12_BLEND_SRC_ALPHA;
+		desc.RenderTarget[0].BlendOp = D3D12_BLEND_OP_ADD;
+		desc.RenderTarget[0].DestBlend = D3D12_BLEND_INV_SRC_ALPHA;
+		break;
+
+	case kBlendModeAdd:             // additive
+		desc.RenderTarget[0].SrcBlend = D3D12_BLEND_SRC_ALPHA;
+		desc.RenderTarget[0].BlendOp = D3D12_BLEND_OP_ADD;
+		desc.RenderTarget[0].DestBlend = D3D12_BLEND_ONE;
+		break;
+
+	case kBlendModeSubtract:        // subtractive
+		desc.RenderTarget[0].SrcBlend = D3D12_BLEND_SRC_ALPHA;
+		desc.RenderTarget[0].BlendOp = D3D12_BLEND_OP_REV_SUBTRACT;
+		desc.RenderTarget[0].DestBlend = D3D12_BLEND_ONE;
+		break;
+
+	case kBlendModeMultiply:        // multiply
+		desc.RenderTarget[0].SrcBlend = D3D12_BLEND_DEST_COLOR;
+		desc.RenderTarget[0].BlendOp = D3D12_BLEND_OP_ADD;
+		desc.RenderTarget[0].DestBlend = D3D12_BLEND_ZERO;
+		break;
+
+	case kBlendModeScreen:          // screen
+		desc.RenderTarget[0].SrcBlend = D3D12_BLEND_INV_DEST_COLOR;
+		desc.RenderTarget[0].BlendOp = D3D12_BLEND_OP_ADD;
+		desc.RenderTarget[0].DestBlend = D3D12_BLEND_ONE;
+		break;
+	}
+
+	return desc;
+}
 
 
 ModelData LoadObjFile(const std::string& directoryPath, const std::string& filename) {
@@ -1172,6 +1234,9 @@ DirectX::ScratchImage LoadTexture(const std::string& filePath) {
 }
 
 int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
+
+	assert(false && "assertのテストだよ");
+
 	SetUnhandledExceptionFilter(ExportDump);
 
 	CoInitializeEx(0, COINIT_MULTITHREADED);
@@ -1223,7 +1288,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 	HWND hwnd = CreateWindow(
 		wc.lpszClassName,		//利用するクラス名
-		L"CG2",					//タイトルバーの文字　（何でもよい)
+		L"LE2C_21_ファルコン_エブラハム",		//タイトルバーの文字　（何でもよい)
 		WS_OVERLAPPEDWINDOW,	//よく見るウインドウスタイル
 		CW_USEDEFAULT,			//表示X座標　（Windowsに任せる）
 		CW_USEDEFAULT,			//表示Y座標　（Windowsに任せる）
@@ -1560,9 +1625,15 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 	//Blend State
 	D3D12_BLEND_DESC blendDesc{};
-	//blendDesc.RenderTarget[0].BlendEnable = FALSE;
 	blendDesc.RenderTarget[0].RenderTargetWriteMask =
 		D3D12_COLOR_WRITE_ENABLE_ALL;
+	//blendDesc.RenderTarget[0].BlendEnable = TRUE;
+	//blendDesc.RenderTarget[0].SrcBlend = D3D12_BLEND_SRC_ALPHA;
+	//blendDesc.RenderTarget[0].BlendOp = D3D12_BLEND_OP_ADD;
+	//blendDesc.RenderTarget[0].DestBlend = D3D12_BLEND_INV_SRC_ALPHA;
+	//blendDesc.RenderTarget[0].SrcBlendAlpha = D3D12_BLEND_ONE;
+	//blendDesc.RenderTarget[0].BlendOpAlpha = D3D12_BLEND_OP_ADD;
+	//blendDesc.RenderTarget[0].DestBlendAlpha = D3D12_BLEND_ZERO;
 
 	//Rasterizer State
 	D3D12_RASTERIZER_DESC rasterizerDesc{};
@@ -1624,11 +1695,14 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	graphicsPipelineStateDesc.DepthStencilState = depthStencilDesc;
 	graphicsPipelineStateDesc.DSVFormat = DXGI_FORMAT_D24_UNORM_S8_UINT;
 
-	Microsoft::WRL::ComPtr<ID3D12PipelineState> graphicsPipelineState = nullptr;
-	hr = device->CreateGraphicsPipelineState(&graphicsPipelineStateDesc,
-		IID_PPV_ARGS(&graphicsPipelineState));
+	Microsoft::WRL::ComPtr<ID3D12PipelineState> graphicsPipelineStates[kCountOfBlendMode];
+	for (int i = 0; i < kCountOfBlendMode; ++i) {
+		D3D12_GRAPHICS_PIPELINE_STATE_DESC psoDesc = graphicsPipelineStateDesc;
+		psoDesc.BlendState = CreateBlendDesc(i);
 
-	assert(SUCCEEDED(hr));
+		hr = device->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&graphicsPipelineStates[i]));
+		assert(SUCCEEDED(hr));
+	}
 	if (FAILED(hr)) {
 		Log(std::format("PSO作成失敗！ HRESULT = 0x{:08X}\n", static_cast<unsigned int>(hr)));
 		__debugbreak();   // ここで停止
@@ -1811,6 +1885,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	device->CreateShaderResourceView(textureResource4.Get(), &srvDesc4, textureSrvHandleCPU4);
 
 	//
+	int currentBlendMode = kBlendModeNormal;
 	float clearColor[] = { 0.1f, 0.25f, 0.5f, 1.0f };
 
 	bool isLight = false;
@@ -2111,23 +2186,23 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 				ImGui::PopID();
 			}
 			ImGui::Separator();
-			// ----- Model 2 (only when active) -----
-			ImGui::Checkbox("Enable Model 2", &showModel2);
-
-			if (showModel2) {
-				ImGui::PushID(1);
-				ImGui::Text("Model 2");
-				ImGui::Combo("Select Model", &selectModel[1], modelNames, IM_ARRAYSIZE(modelNames));
-				ImGui::Combo("Texture", &modelTexture[1][selectModel[1]], textureNames, IM_ARRAYSIZE(textureNames));
-				ImGui::DragFloat3("Scale", &transformModel[1].scale.x, 0.01f, 0.1f, 10.0f);
-				ImGui::DragFloat3("Rotation", &transformModel[1].rotate.x, 0.03f, -10.0f, 10.0f);
-				ImGui::DragFloat3("Position", &transformModel[1].translate.x, 0.01f, -10.0f, 10.0f);
-				if (ImGui::Button("Reset Transform")) {
-					transformModel[1] = { {1,1,1}, {0,0,0}, {-2,0,5} };
-				}
-				ImGui::PopID();
-			}
-			ImGui::Separator();
+			/////// ----- Model 2 (only when active) -----
+			/////ImGui::Checkbox("Enable Model 2", &showModel2);
+			/////
+			/////if (showModel2) {
+			/////	ImGui::PushID(1);
+			/////	ImGui::Text("Model 2");
+			/////	ImGui::Combo("Select Model", &selectModel[1], modelNames, IM_ARRAYSIZE(modelNames));
+			/////	ImGui::Combo("Texture", &modelTexture[1][selectModel[1]], textureNames, IM_ARRAYSIZE(textureNames));
+			/////	ImGui::DragFloat3("Scale", &transformModel[1].scale.x, 0.01f, 0.1f, 10.0f);
+			/////	ImGui::DragFloat3("Rotation", &transformModel[1].rotate.x, 0.03f, -10.0f, 10.0f);
+			/////	ImGui::DragFloat3("Position", &transformModel[1].translate.x, 0.01f, -10.0f, 10.0f);
+			/////	if (ImGui::Button("Reset Transform")) {
+			/////		transformModel[1] = { {1,1,1}, {0,0,0}, {-2,0,5} };
+			/////	}
+			/////	ImGui::PopID();
+			/////}
+			/////ImGui::Separator();
 			ImGui::Checkbox("enableLighting", &isLight);
 			if (isLight) {
 				materialSpriteData->enableLighting = 1;
@@ -2141,7 +2216,9 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			//if (materialSpriteData->lightingMode == 1) {
 			//	ImGui::DragFloat("HalfLambert Power", &materialSpriteData->halfLambertPower, 0.05f, 0.5f, 8.0f);
 			//}
-			if (ImGui::ColorEdit3("LightColor", &directionalLightData->color.x)) {}
+			ImGui::ColorEdit4("Material Color", &materialSpriteData->color.x);
+
+			ImGui::ColorEdit4("LightColor", &directionalLightData->color.x);
 			ImGui::DragFloat3("LightDirection", &directionalLightData->direction.x, 0.01f, -10.0f, 10.0f);
 			ImGui::DragFloat("Intensity", &directionalLightData->intensity, 0.01f, 0.0f, 3.0f);
 			if (ImGui::Button("Reset Lighting")) {
@@ -2152,18 +2229,37 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 				materialSpriteData->lightingMode = 1;
 				materialSpriteData->halfLambertPower = 2.0f;
 			}
-			ImGui::Separator();
-			ImGui::Text("Debug Camera");
-			ImGui::Checkbox("useDebugCamera", &useDebugCamera);
-			ImGui::Separator();
-			ImGui::Text("Camera Mode: %s", useDebugCamera ? "DEBUG CAMERA" : "Regular Camera");
-			if (ImGui::Button("Reset Debug Camera")) {
-				debugCamera.Initialize();
-			}
-			ImGui::Separator();
-			ImGui::Text("DEBUG CAMERA CONTROLS (MOUSE/KEYBOARD)");
-			ImGui::Text("SPACE = Toggle Sound\nW = forward\nS = backward\nA = left\nD = right\nQ = down\nE = up\nMouse Scroll = forward/backward\nLeft Click = drag camera\nRight Click = rotate (Z-axis)");
+			//ImGui::Separator();
+			//ImGui::Text("Debug Camera");
+			//ImGui::Checkbox("useDebugCamera", &useDebugCamera);
+			//ImGui::Separator();
+			//ImGui::Text("Camera Mode: %s", useDebugCamera ? "DEBUG CAMERA" : "Regular Camera");
+			//if (ImGui::Button("Reset Debug Camera")) {
+			//	debugCamera.Initialize();
+			//}
+			//ImGui::Separator();
+			//ImGui::Text("DEBUG CAMERA CONTROLS (MOUSE/KEYBOARD)");
+			//ImGui::Text("SPACE = Toggle Sound\nW = forward\nS = backward\nA = left\nD = right\nQ = down\nE = up\nMouse Scroll = forward/backward\nLeft Click = drag camera\nRight Click = rotate (Z-axis)");
 
+			ImGui::End();
+
+			
+			ImGui::Begin("Blend Settings");
+			ImGui::ColorEdit4("Clear Color", clearColor);
+			const char* blendModeNames[] = { "None", "Normal", "Add", "Subtract", "Multiply", "Screen"};
+			ImGui::Combo("Blend Mode", &currentBlendMode , blendModeNames, IM_ARRAYSIZE(blendModeNames));
+			if (ImGui::Button("Reset Blend Mode")) {
+				currentBlendMode = kBlendModeNormal;
+				clearColor[0] = 0.1f;
+				clearColor[1] = 0.25f;
+				clearColor[2] = 0.5f;
+				clearColor[3] = 1.0f;
+			}
+
+			//satety clamp
+			if (currentBlendMode < 0) currentBlendMode = 0;
+			if (currentBlendMode >= kCountOfBlendMode) currentBlendMode = kCountOfBlendMode - 1;
+			
 			ImGui::End();
 
 			ImGui::Render();
@@ -2188,7 +2284,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			commandList->RSSetScissorRects(1, &scissorRect);
 
 			commandList->SetGraphicsRootSignature(rootSignature.Get());
-			commandList->SetPipelineState(graphicsPipelineState.Get());
+			commandList->SetPipelineState(graphicsPipelineStates[currentBlendMode].Get());
 
 			//set descriptor heap (required for ImGui)
 			ID3D12DescriptorHeap* descriptorHeaps[] = { srvDescriptorHeap.Get()};
@@ -2355,7 +2451,9 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	rtvDescriptorHeap.Reset();
 	dsvDescriptorHeap.Reset();
 
-	graphicsPipelineState.Reset();
+	for (int i = 0; i < kCountOfBlendMode; ++i) {
+		graphicsPipelineStates[i].Reset();
+	}
 	rootSignature.Reset();
 
 	commandList.Reset();
