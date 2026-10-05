@@ -20,8 +20,10 @@
 #include <xaudio2.h>
 #include "DebugCamera.h"
 //#define DIRECTINPUT_VERSION	0x800
-#include <dinput.h>
+//#include <dinput.h>
 #include <wrl.h>
+
+#include "Input.h"
 
 #ifdef USE_IMGUI
 #include "externals/imgui/imgui.h"
@@ -1255,6 +1257,10 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	DebugCamera debugCamera;
 	debugCamera.Initialize();
 
+	Input* input = nullptr;
+	input = new Input();
+	input->Initialize();
+
 	///------SOUND DATA END----------
 
 	//Debug Layer
@@ -1371,33 +1377,33 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 #endif
 
-	////////DirectX Initialize process
-
-	///DirectInput Setup
-	IDirectInput8* directInput = nullptr;
-	hr = DirectInput8Create(wc.hInstance, DIRECTINPUT_VERSION, IID_IDirectInput8, (void**)&directInput, nullptr);
-	assert(SUCCEEDED(hr));
-
-	//Keyboard
-	IDirectInputDevice8* keyboard = nullptr;
-	hr = directInput->CreateDevice(GUID_SysKeyboard, &keyboard, NULL);
-	assert(SUCCEEDED(hr));
-	hr = keyboard->SetDataFormat(&c_dfDIKeyboard);
-	assert(SUCCEEDED(hr));
-	hr = keyboard->SetCooperativeLevel(hwnd, DISCL_FOREGROUND | DISCL_NONEXCLUSIVE | DISCL_NOWINKEY);
-	assert(SUCCEEDED(hr));
-
-	// Mouse
-	IDirectInputDevice8* mouse = nullptr;
-	hr = directInput->CreateDevice(GUID_SysMouse, &mouse, nullptr);
-	assert(SUCCEEDED(hr));
-	hr = mouse->SetDataFormat(&c_dfDIMouse);
-	assert(SUCCEEDED(hr));
-	hr = mouse->SetCooperativeLevel(hwnd, DISCL_FOREGROUND | DISCL_NONEXCLUSIVE);
-	assert(SUCCEEDED(hr));
-
-	ShowCursor(TRUE);
-	ClipCursor(NULL);
+	//----////////DirectX Initialize process
+	//----
+	//----///DirectInput Setup
+	//----IDirectInput8* directInput = nullptr;
+	//----hr = DirectInput8Create(wc.hInstance, DIRECTINPUT_VERSION, IID_IDirectInput8, (void**)&directInput, nullptr);
+	//----assert(SUCCEEDED(hr));
+	//----
+	//----//Keyboard
+	//----IDirectInputDevice8* keyboard = nullptr;
+	//----hr = directInput->CreateDevice(GUID_SysKeyboard, &keyboard, NULL);
+	//----assert(SUCCEEDED(hr));
+	//----hr = keyboard->SetDataFormat(&c_dfDIKeyboard);
+	//----assert(SUCCEEDED(hr));
+	//----hr = keyboard->SetCooperativeLevel(hwnd, DISCL_FOREGROUND | DISCL_NONEXCLUSIVE | DISCL_NOWINKEY);
+	//----assert(SUCCEEDED(hr));
+	//----
+	//----// Mouse
+	//----IDirectInputDevice8* mouse = nullptr;
+	//----hr = directInput->CreateDevice(GUID_SysMouse, &mouse, nullptr);
+	//----assert(SUCCEEDED(hr));
+	//----hr = mouse->SetDataFormat(&c_dfDIMouse);
+	//----assert(SUCCEEDED(hr));
+	//----hr = mouse->SetCooperativeLevel(hwnd, DISCL_FOREGROUND | DISCL_NONEXCLUSIVE);
+	//----assert(SUCCEEDED(hr));
+	//----
+	//----ShowCursor(TRUE);
+	//----ClipCursor(NULL);
 
 
 	//dxCompiler initialization (Before main loop)
@@ -2032,51 +2038,51 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			ImGui::NewFrame();
 #endif
 
-			// ====== Sound and Camera Input ======== //
-			static BYTE prevKeys[256] = {};
-			keyboard->Acquire();
-			keyboard->GetDeviceState(sizeof(gKeys), gKeys);
+			//-----// ====== Sound and Camera Input ======== //
+			//-----static BYTE prevKeys[256] = {};
+			//-----keyboard->Acquire();
+			//-----keyboard->GetDeviceState(sizeof(gKeys), gKeys);
+			//-----
+			//-----// Toggle between Debug and Regular camera (Press SPACE)
+			//-----bool spaceKeyPressed = (gKeys[DIK_SPACE] & 0x80) && !(prevKeys[DIK_SPACE] & 0x80);
+			//-----memcpy(prevKeys, gKeys, sizeof(prevKeys));
+			//-----
+			//-----if (spaceKeyPressed) {  // Key just pressed
+			//-----	//useDebugCamera = !useDebugCamera;
+			//-----	isSoundPlaying = !isSoundPlaying;
+			//-----	SoundPlayWave(xAudio2.Get(), soundData1, isSoundPlaying);
+			//-----}
+			//-----
+			//-----mouse->Acquire();
+			//-----HRESULT hr = mouse->GetDeviceState(sizeof(DIMOUSESTATE), &gMouseState);
 
-			// Toggle between Debug and Regular camera (Press SPACE)
-			bool spaceKeyPressed = (gKeys[DIK_SPACE] & 0x80) && !(prevKeys[DIK_SPACE] & 0x80);
-			memcpy(prevKeys, gKeys, sizeof(prevKeys));
 
-			if (spaceKeyPressed) {  // Key just pressed
-				//useDebugCamera = !useDebugCamera;
-				isSoundPlaying = !isSoundPlaying;
-				SoundPlayWave(xAudio2.Get(), soundData1, isSoundPlaying);
-			}
-
-			mouse->Acquire();
-			HRESULT hr = mouse->GetDeviceState(sizeof(DIMOUSESTATE), &gMouseState);
-
-
-			float mouseDeltaX = 0;
-			float mouseDeltaY = 0;
-			float mouseDeltaZ = (float)gMouseState.lZ; //wheel
-
-			bool isLeftClick = false;
-			bool isRightClick = false;
-
-			if (SUCCEEDED(hr)) {
-				mouseDeltaX = (float)gMouseState.lX;
-				mouseDeltaY = (float)gMouseState.lY;
-				isLeftClick = (gMouseState.rgbButtons[0] & 0x80) != 0;
-				isRightClick = (gMouseState.rgbButtons[1] & 0x80) != 0;
-			}
-
-			if (useDebugCamera) {
-				if (isLeftClick) {
-					debugCamera.SetMouseDelta(mouseDeltaX, mouseDeltaY);      // Yaw + Pitch
-				}
-				if (isRightClick) {
-					debugCamera.SetMouseRollDelta(mouseDeltaX);          // Roll with horizontal drag
-				}
-				if (mouseDeltaZ != 0) {
-					debugCamera.SetMouseWheelDelta(mouseDeltaZ);      // Optional: forward movement
-				}
-				debugCamera.Update();
-			}
+			//-----float mouseDeltaX = 0;
+			//-----float mouseDeltaY = 0;
+			//-----float mouseDeltaZ = (float)gMouseState.lZ; //wheel
+			//-----
+			//-----bool isLeftClick = false;
+			//-----bool isRightClick = false;
+			//-----
+			//-----if (SUCCEEDED(hr)) {
+			//-----	mouseDeltaX = (float)gMouseState.lX;
+			//-----	mouseDeltaY = (float)gMouseState.lY;
+			//-----	isLeftClick = (gMouseState.rgbButtons[0] & 0x80) != 0;
+			//-----	isRightClick = (gMouseState.rgbButtons[1] & 0x80) != 0;
+			//-----}
+			//-----
+			//-----if (useDebugCamera) {
+			//-----	if (isLeftClick) {
+			//-----		debugCamera.SetMouseDelta(mouseDeltaX, mouseDeltaY);      // Yaw + Pitch
+			//-----	}
+			//-----	if (isRightClick) {
+			//-----		debugCamera.SetMouseRollDelta(mouseDeltaX);          // Roll with horizontal drag
+			//-----	}
+			//-----	if (mouseDeltaZ != 0) {
+			//-----		debugCamera.SetMouseWheelDelta(mouseDeltaZ);      // Optional: forward movement
+			//-----	}
+			//-----	debugCamera.Update();
+			//-----}
 			
 
 			// === Update ===
@@ -2465,9 +2471,9 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	device.Reset();             // last
 
 	// ---- Input ----
-	if (mouse) { mouse->Unacquire(); mouse->Release(); mouse = nullptr; }
-	if (keyboard) { keyboard->Unacquire(); keyboard->Release(); keyboard = nullptr; }
-	if (directInput) { directInput->Release(); directInput = nullptr; }
+	//----if (mouse) { mouse->Unacquire(); mouse->Release(); mouse = nullptr; }
+	//----if (keyboard) { keyboard->Unacquire(); keyboard->Release(); keyboard = nullptr; }
+	//----if (directInput) { directInput->Release(); directInput = nullptr; }
 
 	// DXC objects 
 	if (includeHandler) includeHandler->Release();
@@ -2477,6 +2483,8 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	if (pixelShaderBlob)  pixelShaderBlob->Release();
 	if (signatureBlob)    signatureBlob->Release();
 	if (errorBlob)        errorBlob->Release();
+
+	delete input;
 
 
 //#ifdef _DEBUG
