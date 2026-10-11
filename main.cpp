@@ -1237,7 +1237,7 @@ DirectX::ScratchImage LoadTexture(const std::string& filePath) {
 
 int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
-	assert(false && "assertのテストだよ");
+	//assert(false && "assertのテストだよ");
 
 	SetUnhandledExceptionFilter(ExportDump);
 
@@ -1518,7 +1518,18 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	rootParameters[3].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
 	rootParameters[3].Descriptor.ShaderRegister = 1; //b1
 
-
+	//-------------------------------
+	//D3D12_DESCRIPTOR_RANGE descriptorRangeForInstancing[1] = {};
+	//descriptorRangeForInstancing[0].BaseShaderRegister = 0;
+	//descriptorRangeForInstancing[0].NumDescriptors = 1;
+	//descriptorRangeForInstancing[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
+	//descriptorRangeForInstancing[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+	//
+	//rootParameters[1].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+	//rootParameters[1].ShaderVisibility = D3D12_SHADER_VISIBILITY_VERTEX;
+	//rootParameters[1].DescriptorTable.pDescriptorRanges = descriptorRangeForInstancing;
+	//rootParameters[1].DescriptorTable.NumDescriptorRanges = _countof(descriptorRangeForInstancing);
+	//-----------------------------
 	D3D12_STATIC_SAMPLER_DESC staticSamplers[1] = {};
 	staticSamplers[0].Filter = D3D12_FILTER_MIN_MAG_MIP_LINEAR;
 	staticSamplers[0].AddressU = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
@@ -1594,6 +1605,51 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	directionalLightData->direction = { 0.0f, -1.0f, 2.0f };
 	directionalLightData->intensity = 1.0f;
 	float halfLambertPower = 2.0f;
+
+	//Transformation Matrix for Instancing
+	const uint32_t kNumInstance = 10;
+
+	ModelData modelDataInstance;
+	modelDataInstance.vertices.push_back({ .position = {1.0f, 1.0f, 0.0f, 1.0f}, .texcoord = {0.0f, 0.0f}, .normal = {0.0f, 0.0f, 1.0f} });	//top left
+	modelDataInstance.vertices.push_back({ .position = {-1.0f, 1.0f, 0.0f, 1.0f}, .texcoord = {1.0f, 0.0f}, .normal = {0.0f, 0.0f, 1.0f} });	//top right
+	modelDataInstance.vertices.push_back({ .position = {1.0f, -1.0f, 0.0, 1.0f}, .texcoord = {0.0f, 1.0f}, .normal = {0.0f, 0.0f, 1.0f} });	//bottom left
+	modelDataInstance.vertices.push_back({ .position = {1.0f, -1.0f, 0.0, 1.0f}, .texcoord = {0.0f, 1.0f}, .normal = {0.0f, 0.0f, 1.0f} });	//bottom left
+	modelDataInstance.vertices.push_back({ .position = {-1.0f, 1.0f, 0.0f, 1.0f}, .texcoord = {1.0f, 0.0f}, .normal = {0.0f, 0.0f, 1.0f} });	//top right
+	modelDataInstance.vertices.push_back({ .position = {-1.0f, -1.0f, 0.0f, 1.0f}, .texcoord = {1.0f, 1.0f}, .normal = {0.0f, 0.0f, 1.0f} });	//bottom right
+	//modelDataParticle.material.textureFilePatch = "./resources/uvChecker.png";
+
+	Microsoft::WRL::ComPtr<ID3D12Resource> instanceVertexResource =
+		CreateBufferResource(device, sizeof(TransformationMatrix) * modelDataInstance.vertices.size());
+
+	D3D12_VERTEX_BUFFER_VIEW instanceVertexBufferView{};
+	instanceVertexBufferView.BufferLocation = instanceVertexResource->GetGPUVirtualAddress();
+	instanceVertexBufferView.SizeInBytes = UINT(sizeof(TransformationMatrix) * modelDataInstance.vertices.size());
+	instanceVertexBufferView.StrideInBytes = sizeof(TransformationMatrix);
+	{
+		TransformationMatrix* mapped = nullptr;
+		instanceVertexResource->Map(0, nullptr, reinterpret_cast<void**>(&mapped));
+		std::memcpy(mapped, modelDataInstance.vertices.data(),
+			sizeof(TransformationMatrix)* modelDataInstance.vertices.size());
+		instanceVertexResource->Unmap(0, nullptr);
+	}
+
+	WorldTransform transforms[kNumInstance];
+	for (uint32_t index = 0; index < kNumInstance; ++index) {
+		transforms[index].scale = { 1.0f, 1.0f, 1.0f };
+		transforms[index].rotate = { 0.0f, 0.0f, 0.0f };
+		transforms[index].translate = { index * 0.1f, index * 0.1f, index * 0.1f };
+	}
+
+	Microsoft::WRL::ComPtr<ID3D12Resource> instanceWVPResource =
+		CreateBufferResource(device, sizeof(TransformationMatrix) * kNumInstance);
+	TransformationMatrix* instancingData = nullptr;
+	instanceWVPResource->Map(0, nullptr, reinterpret_cast<void**>(&instancingData));
+
+	for (uint32_t index = 0; index < kNumInstance; ++index) {
+		instancingData[index].WVP = MakeIdentity4x4(instancingData[index].WVP);
+		instancingData[index].World = MakeIdentity4x4(instancingData[index].World);
+	}
+
 
 	//Serialize and make into binary
 	ID3DBlob* signatureBlob = nullptr;
@@ -1862,6 +1918,17 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	srvDesc4.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
 	srvDesc4.Texture2D.MipLevels = UINT(metadata3.mipLevels);
 
+	//instancing SRV
+	D3D12_SHADER_RESOURCE_VIEW_DESC instancingSrvDesc{};
+	instancingSrvDesc.Format = DXGI_FORMAT_UNKNOWN;
+	instancingSrvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+	instancingSrvDesc.ViewDimension = D3D12_SRV_DIMENSION_BUFFER;
+	instancingSrvDesc.Buffer.FirstElement = 0;
+	instancingSrvDesc.Buffer.Flags = D3D12_BUFFER_SRV_FLAG_NONE;
+	instancingSrvDesc.Buffer.NumElements = kNumInstance;
+	instancingSrvDesc.Buffer.StructureByteStride = sizeof(TransformationMatrix);
+	
+
 	//Process screen Back Buffer to Front Buffer (Screen Swap)
 	UINT backBufferIndex = swapChain->GetCurrentBackBufferIndex();
 	D3D12_CPU_DESCRIPTOR_HANDLE dsvHandle = dsvDescriptorHeap->GetCPUDescriptorHandleForHeapStart();
@@ -1890,6 +1957,9 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	D3D12_GPU_DESCRIPTOR_HANDLE textureSrvHandleGPU4 = GetGPUDescriptorHandle(srvDescriptorHeap.Get(), descriptorSizeSRV, 5);
 	device->CreateShaderResourceView(textureResource4.Get(), &srvDesc4, textureSrvHandleCPU4);
 
+	D3D12_CPU_DESCRIPTOR_HANDLE instancingSrvHandleCPU = GetCPUDescriptorHandle(srvDescriptorHeap.Get(), descriptorSizeSRV, 3);
+	D3D12_GPU_DESCRIPTOR_HANDLE instancingSrvHandleGPU = GetGPUDescriptorHandle(srvDescriptorHeap.Get(), descriptorSizeSRV, 3);
+	device->CreateShaderResourceView(instanceWVPResource.Get(), &instancingSrvDesc, instancingSrvHandleCPU);
 	//
 	int currentBlendMode = kBlendModeNormal;
 	float clearColor[] = { 0.1f, 0.25f, 0.5f, 1.0f };
@@ -1906,12 +1976,11 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	int modelTexture[2][8] = {
 		{ 0, 0, 0, 0, 0, 0, 0, 0 },
 		{ 0, 0, 0, 0, 0, 0, 0, 0 },
-	
 	};
 	WorldTransform transformModel[2] = {
 		{{ 1.0f, 1.0f, 1.0f}, { 0.0f, 0.0f, 0.0f }, {2.0f, 0.0f, 5.0f}},
 		{{ 1.0f, 1.0f, 1.0f}, { 0.0f, 0.0f, 0.0f }, {-2.0f, 0.0f, 5.0f}},
-		};
+	};
 
 	const char* modelNames[] = { "plane.obj", "multiMesh.obj", "axis.obj", "multiMaterial.obj" , "Sphere.obj", "utah_teapot.obj", "bunny.obj", "suzanne.obj"};
 	const char* textureNames[] = { "uvChecker", "monsterball", "sample", "checkerboard", "grid"};
@@ -1926,7 +1995,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	};
 
 	const int kModelCount = 8;
-
+	
 	ModelData modelData[kModelCount]; 
 	modelData[0] = LoadObjFile("Resources", "plane.obj");			// [0] 2D PLANE
 	modelData[1] = LoadObjFile("Resources", "multiMesh.obj");		// [1] MULTI-MESH
@@ -1940,7 +2009,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			modelData[4].vertices = std::move(sphere.vertices);
 		}
 	
-
+	
 	Microsoft::WRL::ComPtr<ID3D12Resource> modelVertexResources[kModelCount];
 	D3D12_VERTEX_BUFFER_VIEW modelVertexBufferViews[kModelCount];
 
@@ -2143,7 +2212,15 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			//bool the moment a key is pressed (uint8_t [key #]
 			//prevents negative values and limitted to [0 - 255]
 
+		//instancing
+		for (uint32_t index = 0; index < kNumInstance; ++index) {
+			Matrix4x4 worldMatrix = MakeAffineMatrix(transforms[index].scale, transforms[index].rotate, transforms[index].translate);
 
+			Matrix4x4 viewProjectionMatrix = MakeOrthographicMatrix(0.0f, 0.0f, float(kClientWidth), float(kClientHeight), 0.0f, 100.0f);
+			Matrix4x4 worldViewProjectionMatrix = Multiply(worldMatrix, viewProjectionMatrix);
+			instancingData[index].WVP = worldViewProjectionMatrix;
+			instancingData[index].World = worldMatrix;
+		}
 
 #ifdef USE_IMGUI
 			//ImGui::ShowDemoWindow();
@@ -2339,7 +2416,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 					commandList->SetGraphicsRootDescriptorTable(2, textureHandles[modelTexture[1][idx]]);
 					commandList->IASetVertexBuffers(0, 1, &modelVertexBufferViews[idx]);
 					commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-					commandList->DrawInstanced(UINT(modelData[idx].vertices.size()), 1, 0, 0);
+					commandList->DrawInstanced(UINT(modelData[idx].vertices.size()), 1, 0, 0); //change 1 to instanceCount (Particle )
 				}
 			}
 
@@ -2353,10 +2430,35 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 				commandList->DrawInstanced(6, 1, 0, 0);
 			}
 
-			for (int i = 0; i < numTextures; ++i) {
-				OutputDebugStringA(std::format("textureHandles[{}] = 0x{:X}\n",
-					i, textureHandles[i].ptr).c_str());
+			//// 4. instancing (lots of flat polygons)
+			//for (number of Particles) {
+			//	commandList->SetGraphicsRootDescriptorTable(1, instancingSrvHandleGPU);
+			//	commandList->DrawInstanced(UINT(modelData.vertices.size()), kNumInstance, 0, 0);
+			//}
+			//commandList->SetGraphicsRootSignature(rootSignature.Get());
+			//commandList->SetPipelineState(graphicsPipelineStates[currentBlendMode].Get());
+			//
+			//commandList->SetGraphicsRootConstantBufferView(0, instancingResource->GetGPUVirtualAddress());
+			//commandList->SetGraphicsRootDescriptorTable(1, instancingSrvHandleGPU);	//structured buffer
+			//commandList->SetGraphicsRootDescriptorTable(2, textureHandles[0]);	//texture
+			//commandList->SetGraphicsRootConstantBufferView(3, materialResourceLight->GetGPUVirtualAddress());
+			//
+			commandList->IASetVertexBuffers(0, 1, &instanceVertexBufferView);
+			commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+
+			for (uint32_t i = 0; i < kNumInstance; ++i) {
+				D3D12_GPU_VIRTUAL_ADDRESS addr = instanceWVPResource->GetGPUVirtualAddress() + i * sizeof(TransformationMatrix);
+
+				commandList->SetGraphicsRootConstantBufferView(0, addr);
+				commandList->SetGraphicsRootDescriptorTable(2, textureHandles[0]);
+				commandList->DrawInstanced(6, 1, 0, 0);
 			}
+			//commandList->DrawInstanced(UINT(modelDataInstance.vertices.size()), kNumInstance, 0, 0);	//6 vertices + #of Instances
+			//
+			//for (int i = 0; i < numTextures; ++i) {
+			//	OutputDebugStringA(std::format("textureHandles[{}] = 0x{:X}\n",
+			//		i, textureHandles[i].ptr).c_str());
+			//}
 
 			
 		#ifdef USE_IMGUI
