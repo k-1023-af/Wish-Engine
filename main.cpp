@@ -1463,6 +1463,10 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	Microsoft::WRL::ComPtr<ID3D12Resource> textureResource4 = CreateTextureResource(device, metadata4);
 	Microsoft::WRL::ComPtr<ID3D12Resource> intermediateResource4 = UploadTextureData(textureResource4.Get(), mipImages4, device.Get(), commandList.Get());
 
+	DirectX::ScratchImage mipImages5 = LoadTexture("Resources/fence.png");
+	const DirectX::TexMetadata& metadata5 = mipImages5.GetMetadata();
+	Microsoft::WRL::ComPtr<ID3D12Resource> textureResource5 = CreateTextureResource(device, metadata5);
+	Microsoft::WRL::ComPtr<ID3D12Resource> intermediateResource5 = UploadTextureData(textureResource5.Get(), mipImages5, device.Get(), commandList.Get());
 
 	//--------------Load Texture end --------------
 
@@ -1619,17 +1623,17 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	//modelDataParticle.material.textureFilePatch = "./resources/uvChecker.png";
 
 	Microsoft::WRL::ComPtr<ID3D12Resource> instanceVertexResource =
-		CreateBufferResource(device, sizeof(TransformationMatrix) * modelDataInstance.vertices.size());
+		CreateBufferResource(device, sizeof(VertexData) * modelDataInstance.vertices.size());
 
 	D3D12_VERTEX_BUFFER_VIEW instanceVertexBufferView{};
 	instanceVertexBufferView.BufferLocation = instanceVertexResource->GetGPUVirtualAddress();
-	instanceVertexBufferView.SizeInBytes = UINT(sizeof(TransformationMatrix) * modelDataInstance.vertices.size());
-	instanceVertexBufferView.StrideInBytes = sizeof(TransformationMatrix);
+	instanceVertexBufferView.SizeInBytes = UINT(sizeof(VertexData) * modelDataInstance.vertices.size());
+	instanceVertexBufferView.StrideInBytes = sizeof(VertexData);
 	{
-		TransformationMatrix* mapped = nullptr;
+		VertexData* mapped = nullptr;
 		instanceVertexResource->Map(0, nullptr, reinterpret_cast<void**>(&mapped));
 		std::memcpy(mapped, modelDataInstance.vertices.data(),
-			sizeof(TransformationMatrix)* modelDataInstance.vertices.size());
+			sizeof(VertexData)* modelDataInstance.vertices.size());
 		instanceVertexResource->Unmap(0, nullptr);
 	}
 
@@ -1728,9 +1732,9 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	//
 	D3D12_DEPTH_STENCIL_DESC depthStencilDesc{};
 	depthStencilDesc.DepthEnable = true;
-	depthStencilDesc.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ALL;
+	depthStencilDesc.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ZERO;
 	depthStencilDesc.DepthFunc = D3D12_COMPARISON_FUNC_LESS_EQUAL;
-	//depthStencilDesc.StencilEnable = false;
+	depthStencilDesc.StencilEnable = false;
 
 	/*------------PSO end--------------*/
 
@@ -1784,7 +1788,6 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	vertexResourceDesc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
 
 	
-
 	//Viewport and Scissor
 	D3D12_VIEWPORT viewport{};
 	viewport.Width = kClientWidth;
@@ -1916,7 +1919,13 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	srvDesc4.Format = metadata4.format;
 	srvDesc4.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
 	srvDesc4.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
-	srvDesc4.Texture2D.MipLevels = UINT(metadata3.mipLevels);
+	srvDesc4.Texture2D.MipLevels = UINT(metadata4.mipLevels);
+
+	D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc5{};
+	srvDesc5.Format = metadata5.format;
+	srvDesc5.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+	srvDesc5.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+	srvDesc5.Texture2D.MipLevels = UINT(metadata5.mipLevels);
 
 	//instancing SRV
 	D3D12_SHADER_RESOURCE_VIEW_DESC instancingSrvDesc{};
@@ -1957,6 +1966,10 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	D3D12_GPU_DESCRIPTOR_HANDLE textureSrvHandleGPU4 = GetGPUDescriptorHandle(srvDescriptorHeap.Get(), descriptorSizeSRV, 5);
 	device->CreateShaderResourceView(textureResource4.Get(), &srvDesc4, textureSrvHandleCPU4);
 
+	D3D12_CPU_DESCRIPTOR_HANDLE textureSrvHandleCPU5 = GetCPUDescriptorHandle(srvDescriptorHeap.Get(), descriptorSizeSRV, 6);
+	D3D12_GPU_DESCRIPTOR_HANDLE textureSrvHandleGPU5 = GetGPUDescriptorHandle(srvDescriptorHeap.Get(), descriptorSizeSRV, 6);
+	device->CreateShaderResourceView(textureResource5.Get(), &srvDesc5, textureSrvHandleCPU5);///////////////where is srvDesc5???????????????
+
 	D3D12_CPU_DESCRIPTOR_HANDLE instancingSrvHandleCPU = GetCPUDescriptorHandle(srvDescriptorHeap.Get(), descriptorSizeSRV, 3);
 	D3D12_GPU_DESCRIPTOR_HANDLE instancingSrvHandleGPU = GetGPUDescriptorHandle(srvDescriptorHeap.Get(), descriptorSizeSRV, 3);
 	device->CreateShaderResourceView(instanceWVPResource.Get(), &instancingSrvDesc, instancingSrvHandleCPU);
@@ -1982,19 +1995,19 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		{{ 1.0f, 1.0f, 1.0f}, { 0.0f, 0.0f, 0.0f }, {-2.0f, 0.0f, 5.0f}},
 	};
 
-	const char* modelNames[] = { "plane.obj", "multiMesh.obj", "axis.obj", "multiMaterial.obj" , "Sphere.obj", "utah_teapot.obj", "bunny.obj", "suzanne.obj"};
-	const char* textureNames[] = { "uvChecker", "monsterball", "sample", "checkerboard", "grid"};
+	const char* modelNames[] = { "plane.obj", "multiMesh.obj", "axis.obj", "multiMaterial.obj" , "Sphere.obj", "utah_teapot.obj", "bunny.obj", "suzanne.obj", "fence.obj"};
+	const char* textureNames[] = { "uvChecker", "monsterball", "sample", "checkerboard", "grid", "fence"};
 
-	D3D12_GPU_DESCRIPTOR_HANDLE textureHandles[5] = {
+	D3D12_GPU_DESCRIPTOR_HANDLE textureHandles[6] = {
 		textureSrvHandleGPU0,
 		textureSrvHandleGPU1,
 		textureSrvHandleGPU2,
 		textureSrvHandleGPU3,
 		textureSrvHandleGPU4,
-
+		textureSrvHandleGPU5,
 	};
 
-	const int kModelCount = 8;
+	const int kModelCount = 9;
 	
 	ModelData modelData[kModelCount]; 
 	modelData[0] = LoadObjFile("Resources", "plane.obj");			// [0] 2D PLANE
@@ -2004,6 +2017,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	modelData[5] = LoadObjFile("Resources", "utah_teapot.obj");		// [5] UTAH_TEAPOT
 	modelData[6] = LoadObjFile("Resources", "bunny.obj");			// [6] STANFORD_BUNNY
 	modelData[7] = LoadObjFile("Resources", "suzanne.obj");			// [7] SUZANNE
+	modelData[8] = LoadObjFile("Resources", "fence.obj");			// [8] FENCE
 		{
 			SphereMesh sphere = DrawSphere(16, 1);					// [4] SPHERE
 			modelData[4].vertices = std::move(sphere.vertices);
@@ -2270,22 +2284,22 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			}
 			ImGui::Separator();
 			/////// ----- Model 2 (only when active) -----
-			/////ImGui::Checkbox("Enable Model 2", &showModel2);
-			/////
-			/////if (showModel2) {
-			/////	ImGui::PushID(1);
-			/////	ImGui::Text("Model 2");
-			/////	ImGui::Combo("Select Model", &selectModel[1], modelNames, IM_ARRAYSIZE(modelNames));
-			/////	ImGui::Combo("Texture", &modelTexture[1][selectModel[1]], textureNames, IM_ARRAYSIZE(textureNames));
-			/////	ImGui::DragFloat3("Scale", &transformModel[1].scale.x, 0.01f, 0.1f, 10.0f);
-			/////	ImGui::DragFloat3("Rotation", &transformModel[1].rotate.x, 0.03f, -10.0f, 10.0f);
-			/////	ImGui::DragFloat3("Position", &transformModel[1].translate.x, 0.01f, -10.0f, 10.0f);
-			/////	if (ImGui::Button("Reset Transform")) {
-			/////		transformModel[1] = { {1,1,1}, {0,0,0}, {-2,0,5} };
-			/////	}
-			/////	ImGui::PopID();
-			/////}
-			/////ImGui::Separator();
+			ImGui::Checkbox("Enable Model 2", &showModel2);
+			
+			if (showModel2) {
+				ImGui::PushID(1);
+				ImGui::Text("Model 2");
+				ImGui::Combo("Select Model", &selectModel[1], modelNames, IM_ARRAYSIZE(modelNames));
+				ImGui::Combo("Texture", &modelTexture[1][selectModel[1]], textureNames, IM_ARRAYSIZE(textureNames));
+				ImGui::DragFloat3("Scale", &transformModel[1].scale.x, 0.01f, 0.1f, 10.0f);
+				ImGui::DragFloat3("Rotation", &transformModel[1].rotate.x, 0.03f, -10.0f, 10.0f);
+				ImGui::DragFloat3("Position", &transformModel[1].translate.x, 0.01f, -10.0f, 10.0f);
+				if (ImGui::Button("Reset Transform")) {
+					transformModel[1] = { {1,1,1}, {0,0,0}, {-2,0,5} };
+				}
+				ImGui::PopID();
+			}
+			ImGui::Separator();
 			ImGui::Checkbox("enableLighting", &isLight);
 			if (isLight) {
 				materialSpriteData->enableLighting = 1;
@@ -2451,7 +2465,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 				commandList->SetGraphicsRootConstantBufferView(0, addr);
 				commandList->SetGraphicsRootDescriptorTable(2, textureHandles[0]);
-				commandList->DrawInstanced(6, 1, 0, 0);
+				commandList->DrawIndexedInstanced(6, 1, 0, 0, 0);
 			}
 			//commandList->DrawInstanced(UINT(modelDataInstance.vertices.size()), kNumInstance, 0, 0);	//6 vertices + #of Instances
 			//
@@ -2544,12 +2558,14 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	intermediateResource2.Reset();
 	intermediateResource3.Reset();
 	intermediateResource4.Reset();
+	intermediateResource5.Reset();
 
 	textureResource0.Reset();
 	textureResource1.Reset();
 	textureResource2.Reset();
 	textureResource3.Reset();
 	textureResource4.Reset();
+	textureResource5.Reset();
 
 	depthStencilResource.Reset();
 	swapChainResources[0].Reset();
