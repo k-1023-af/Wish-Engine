@@ -214,7 +214,7 @@ ModelData LoadObjFile(const std::string& directoryPath, const std::string& filen
 	//2.ファイルを開く
 	std::ifstream file(directoryPath + "/" + filename);
 	assert(file.is_open());
-	
+
 	//3.実際にファイルを読み、ModelDataを構築していく
 	while (std::getline(file, line)) {
 		std::string identifier;
@@ -238,17 +238,13 @@ ModelData LoadObjFile(const std::string& directoryPath, const std::string& filen
 			s >> normal.x >> normal.y >> normal.z;
 			normals.push_back(normal);
 		}
+		//supports triangles, quads and genreal convex n-gons
 		else if (identifier == "f") {
-			//Triangle only (use something else for other shapes)
-			VertexData triangle[3];
-			int validVertices = 0;
-			
-			for (int32_t faceVertex = 0; faceVertex < 3; ++faceVertex) {
-				std::string vertexDefinition;
+			std::vector<VertexData> faceVerts;
+			std::string vertexDefinition;
 
-				if (!(s >> vertexDefinition)) break;   // not enough tokens
-
-				//[position/UV/Vector]
+			while (s >> vertexDefinition) {
+				// position/uv/normal 
 				std::istringstream v(vertexDefinition);
 				uint32_t elementIndices[3] = { 0,0,0 };
 
@@ -264,31 +260,50 @@ ModelData LoadObjFile(const std::string& directoryPath, const std::string& filen
 						}
 					}
 				}
+
+				// skip invalid position index
 				if (elementIndices[0] == 0 || elementIndices[0] > positions.size()) {
-					continue;   // skip this vertex
+					continue;
 				}
-				// Load vertices, normals, texture coordinates, and material data from the OBJ file
+
 				Vector4 position = positions[elementIndices[0] - 1];
-				position.x *= 1.0f;
 
 				Vector2 texcoord = { 0.0f, 0.0f };
 				if (elementIndices[1] > 0 && elementIndices[1] <= texcoords.size()) {
 					texcoord = texcoords[elementIndices[1] - 1];
-					texcoord.y = 1.0f - texcoord.y; // flip V
+					texcoord.y = 1.0f - texcoord.y;	// flip v
 				}
 
 				Vector3 normal = { 0.0f, 0.0f, 1.0f };
 				if (elementIndices[2] > 0 && elementIndices[2] <= normals.size()) {
 					normal = normals[elementIndices[2] - 1];
-					normal.x *= -1.0f; // keep your existing flip
+					normal.x *= -1.0f;	// keep existing flip
 				}
-				VertexData vertex = { position, texcoord, normal };
-				modelData.vertices.push_back(vertex);
-				triangle[faceVertex] = vertex;
+
+				faceVerts.push_back({ position,texcoord,normal });
 			}
-			modelData.vertices.push_back(triangle[2]);
-			modelData.vertices.push_back(triangle[1]);
-			modelData.vertices.push_back(triangle[0]);
+			// triangle fan (0,i,i+1)
+			for (size_t i = 1; i + 1 < faceVerts.size(); ++i) {
+
+				VertexData v0 = faceVerts[0];
+				VertexData v1 = faceVerts[i];
+				VertexData v2 = faceVerts[i + 1];
+
+				// Front face (keep your existing reversed winding if you need it)
+				modelData.vertices.push_back(v0);
+				modelData.vertices.push_back(v2);
+				modelData.vertices.push_back(v1);
+
+				// Back face: opposite winding + flipped normals
+				VertexData b0 = v0; b0.normal.x = -b0.normal.x; b0.normal.y = -b0.normal.y; b0.normal.z = -b0.normal.z;
+				VertexData b1 = v1; b1.normal.x = -b1.normal.x; b1.normal.y = -b1.normal.y; b1.normal.z = -b1.normal.z;
+				VertexData b2 = v2; b2.normal.x = -b2.normal.x; b2.normal.y = -b2.normal.y; b2.normal.z = -b2.normal.z;
+
+				modelData.vertices.push_back(b0);
+				modelData.vertices.push_back(b1);  // opposite order of front
+				modelData.vertices.push_back(b2);
+
+			}
 		}
 	}
 	//4.ModelDataを返す
@@ -296,7 +311,7 @@ ModelData LoadObjFile(const std::string& directoryPath, const std::string& filen
 }
 
 MaterialData LoadMaterialTemplateFile(const std::string& directoryPath, const std::string& filename) {
-	
+
 	//1.中で必要となる変数の宣言
 	ModelData modelData;
 	MaterialData materialData;
@@ -331,7 +346,7 @@ MaterialData LoadMaterialTemplateFile(const std::string& directoryPath, const st
 }
 
 SoundData SoundLoadWave(const char* filename) {
-	
+
 	//1. File open
 	std::ifstream file;
 
@@ -378,7 +393,7 @@ SoundData SoundLoadWave(const char* filename) {
 	//3. File close
 
 	//4. return read sound data
-	
+
 
 	SoundData soundData = {};
 
@@ -595,7 +610,7 @@ Matrix4x4 MakeTranslateMatrix(Vector3 translate) {
 }
 
 Matrix4x4 MakeUVTransformMatrix(const WorldTransform& uv) {
-	
+
 	Matrix4x4 scaleMatrix = MakeScaleMatrix(uv.scale);
 	//Matrix4x4 rotateXMatrix = MakeRotateXMatrix(uv.rotate.x);
 	//Matrix4x4 rotateYMatrix = MakeRotateYMatrix(uv.rotate.y);
@@ -772,7 +787,7 @@ WorldTransform cameraTransform = {
 	{ 0.0f, 0.0f, -5.0f } // translate (move camera back along z-axis)
 };
 
-WorldTransform uvTransformSprite = { 
+WorldTransform uvTransformSprite = {
 	{ 1.0f, 1.0f, 1.0f }, // scale
 	{ 0.0f, 0.0f, 0.0f }, // rotate
 	{ 0.0f, 0.0f, 0.0f },  // translate
@@ -924,81 +939,81 @@ IDxcBlob* CompileShader(
 	IDxcCompiler3* dxcCompiler,
 	IDxcIncludeHandler* includeHandler)
 
-	{ ////-----------CompileShader function start-----------/////
-		//1. hlsl file read
+{ ////-----------CompileShader function start-----------/////
+	//1. hlsl file read
 
 	Log(ConvertString(std::format(L"Begin CompileShader, path:{}, profile:{}\n", filePath, profile)));
 
-IDxcBlobEncoding* shaderSource = nullptr;
-HRESULT hr = dxcUtils->LoadFile(filePath.c_str(), nullptr, &shaderSource);
-//assert(SUCCEEDED(hr));
-if (FAILED(hr)) {
-	Log(std::format("Failed to load shader file: {}\n", ConvertString(filePath)));
-	Log(std::format("HRESULT = 0x{:08X}\n", static_cast<unsigned int>(hr)));
-}
+	IDxcBlobEncoding* shaderSource = nullptr;
+	HRESULT hr = dxcUtils->LoadFile(filePath.c_str(), nullptr, &shaderSource);
+	//assert(SUCCEEDED(hr));
+	if (FAILED(hr)) {
+		Log(std::format("Failed to load shader file: {}\n", ConvertString(filePath)));
+		Log(std::format("HRESULT = 0x{:08X}\n", static_cast<unsigned int>(hr)));
+	}
 
-DxcBuffer shaderSourceBuffer;
-shaderSourceBuffer.Ptr = shaderSource->GetBufferPointer();
-shaderSourceBuffer.Size = shaderSource->GetBufferSize();
-shaderSourceBuffer.Encoding = DXC_CP_UTF8;
-//2. compile
-LPCWSTR arguments[] = {
-	filePath.c_str(),//entry point (hlsl file name)
-	L"-E", L"main",//entry point path. Fundamentally does not go outside main
-	L"-T", profile,//Shader profile settings
-	L"-Zi", L"-Qembed_debug",//debug information is buried
-	L"-Od",		//optimization disabled
-	L"-Zpr",	//memory out (priority)
-};
+	DxcBuffer shaderSourceBuffer;
+	shaderSourceBuffer.Ptr = shaderSource->GetBufferPointer();
+	shaderSourceBuffer.Size = shaderSource->GetBufferSize();
+	shaderSourceBuffer.Encoding = DXC_CP_UTF8;
+	//2. compile
+	LPCWSTR arguments[] = {
+		filePath.c_str(),//entry point (hlsl file name)
+		L"-E", L"main",//entry point path. Fundamentally does not go outside main
+		L"-T", profile,//Shader profile settings
+		L"-Zi", L"-Qembed_debug",//debug information is buried
+		L"-Od",		//optimization disabled
+		L"-Zpr",	//memory out (priority)
+	};
 
-IDxcResult* shaderResult = nullptr;
-hr = dxcCompiler->Compile(
-	&shaderSourceBuffer,
-	arguments,
-	_countof(arguments),
-	includeHandler,
-	IID_PPV_ARGS(&shaderResult)
-);
-assert(SUCCEEDED(hr));
+	IDxcResult* shaderResult = nullptr;
+	hr = dxcCompiler->Compile(
+		&shaderSourceBuffer,
+		arguments,
+		_countof(arguments),
+		includeHandler,
+		IID_PPV_ARGS(&shaderResult)
+	);
+	assert(SUCCEEDED(hr));
 
-HRESULT compileStatus = E_FAIL;
-shaderResult->GetStatus(&compileStatus);
+	HRESULT compileStatus = E_FAIL;
+	shaderResult->GetStatus(&compileStatus);
 
-//3. check for no warnings or error
-IDxcBlobUtf8* shaderError = nullptr;
-shaderResult->GetOutput(DXC_OUT_ERRORS, IID_PPV_ARGS(&shaderError), nullptr);
-if (shaderError != nullptr && shaderError->GetStringLength() != 0) {
-	Log("=== Shader Compiler Output ===");
-	Log(shaderError->GetStringPointer());
-	shaderError->Release();
-}
+	//3. check for no warnings or error
+	IDxcBlobUtf8* shaderError = nullptr;
+	shaderResult->GetOutput(DXC_OUT_ERRORS, IID_PPV_ARGS(&shaderError), nullptr);
+	if (shaderError != nullptr && shaderError->GetStringLength() != 0) {
+		Log("=== Shader Compiler Output ===");
+		Log(shaderError->GetStringPointer());
+		shaderError->Release();
+	}
 
-if (FAILED(compileStatus)) {
-	Log("=== Shader Compilation FAILED ===\n");
-	return nullptr;
-}
-//4. compile results return
-IDxcBlob* shaderBlob = nullptr;
-hr = shaderResult->GetOutput(DXC_OUT_OBJECT, IID_PPV_ARGS(&shaderBlob), nullptr);
-assert(SUCCEEDED(hr) && shaderBlob != nullptr && shaderBlob->GetBufferSize() > 0);
+	if (FAILED(compileStatus)) {
+		Log("=== Shader Compilation FAILED ===\n");
+		return nullptr;
+	}
+	//4. compile results return
+	IDxcBlob* shaderBlob = nullptr;
+	hr = shaderResult->GetOutput(DXC_OUT_OBJECT, IID_PPV_ARGS(&shaderBlob), nullptr);
+	assert(SUCCEEDED(hr) && shaderBlob != nullptr && shaderBlob->GetBufferSize() > 0);
 
-Log(ConvertString(std::format(L"Compile Succeeded, path:{}, profile:{}\n", filePath, profile)));
-shaderSource->Release();
-shaderResult->Release();
-if (shaderError) shaderError->Release();
+	Log(ConvertString(std::format(L"Compile Succeeded, path:{}, profile:{}\n", filePath, profile)));
+	shaderSource->Release();
+	shaderResult->Release();
+	if (shaderError) shaderError->Release();
 
-return shaderBlob;
+	return shaderBlob;
 
 } ////-----------CompileShader function end-----------/////
 
 
 // Helper function to create an Upload Heap Buffer
 Microsoft::WRL::ComPtr<ID3D12Resource> CreateBufferResource(const Microsoft::WRL::ComPtr<ID3D12Device>& device, const size_t sizeInBytes)
-{ 
+{
 	D3D12_HEAP_PROPERTIES heapProperties{};
 	heapProperties.Type = D3D12_HEAP_TYPE_UPLOAD;
-	heapProperties.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN;     
-	heapProperties.MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN;     
+	heapProperties.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN;
+	heapProperties.MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN;
 
 	// Resource description for buffer
 	D3D12_RESOURCE_DESC resourceDesc{};
@@ -1050,8 +1065,8 @@ Microsoft::WRL::ComPtr<ID3D12Resource> CreateTextureResource(const Microsoft::WR
 	//2. Heap settings
 	D3D12_HEAP_PROPERTIES heapProperties{};
 	heapProperties.Type = D3D12_HEAP_TYPE_DEFAULT;
-	heapProperties.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN;     
-	heapProperties.MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN;     
+	heapProperties.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN;
+	heapProperties.MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN;
 
 	//3. Create Resource
 	Microsoft::WRL::ComPtr<ID3D12Resource> resource = nullptr;
@@ -1085,8 +1100,8 @@ Microsoft::WRL::ComPtr<ID3D12Resource> CreateDepthStencilTextureResource(const M
 
 	D3D12_HEAP_PROPERTIES heapProperties{};
 	heapProperties.Type = D3D12_HEAP_TYPE_DEFAULT;
-	heapProperties.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN;      
-	heapProperties.MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN;       
+	heapProperties.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN;
+	heapProperties.MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN;
 
 	D3D12_CLEAR_VALUE depthClearValue{};
 	depthClearValue.DepthStencil.Depth = 1.0f;
@@ -1171,14 +1186,14 @@ SphereMesh DrawSphere(const uint32_t subdivision, float radius) {
 			vertexData[0].position.w = 1.0f;
 			vertexData[0].texcoord = { u, v }; //a
 			vertexData[0].normal = { vertexData[0].position.x, vertexData[0].position.y, vertexData[0].position.z };
-			
+
 			vertexData[1].position.x = radius * cos(latNext) * cosf(lon);
 			vertexData[1].position.y = radius * sin(latNext);
 			vertexData[1].position.z = radius * cos(latNext) * sin(lon);
 			vertexData[1].position.w = 1.0f;
 			vertexData[1].texcoord = { u, vNext };  //b
 			vertexData[1].normal = { vertexData[1].position.x, vertexData[1].position.y, vertexData[1].position.z };
-			
+
 			vertexData[2].position.x = radius * cos(lat) * cosf(lonNext);
 			vertexData[2].position.y = radius * sin(lat);
 			vertexData[2].position.z = radius * cos(lat) * sin(lonNext);
@@ -1198,7 +1213,7 @@ SphereMesh DrawSphere(const uint32_t subdivision, float radius) {
 			vertexData[5].position.y = radius * sin(latNext);
 			vertexData[5].position.z = radius * cos(latNext) * sin(lonNext);
 			vertexData[5].position.w = 1.0f;
-			vertexData[5].texcoord = { uNext, vNext}; //d
+			vertexData[5].texcoord = { uNext, vNext }; //d
 			vertexData[5].normal = { vertexData[5].position.x, vertexData[5].position.y, vertexData[5].position.z };
 
 			//vertices
@@ -1473,7 +1488,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	//Depth Stencil Buffer
 	Microsoft::WRL::ComPtr<ID3D12Resource> depthStencilResource = CreateDepthStencilTextureResource(device, kClientWidth, kClientHeight);
 	Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> dsvDescriptorHeap = CreateDescriptorHeap(device, D3D12_DESCRIPTOR_HEAP_TYPE_DSV, 1, false);
-											   
+
 	Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> rtvDescriptorHeap = CreateDescriptorHeap(device, D3D12_DESCRIPTOR_HEAP_TYPE_RTV, 2, false);
 	Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> srvDescriptorHeap = CreateDescriptorHeap(device, D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 128, true);
 
@@ -1522,18 +1537,6 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	rootParameters[3].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
 	rootParameters[3].Descriptor.ShaderRegister = 1; //b1
 
-	//-------------------------------
-	//D3D12_DESCRIPTOR_RANGE descriptorRangeForInstancing[1] = {};
-	//descriptorRangeForInstancing[0].BaseShaderRegister = 0;
-	//descriptorRangeForInstancing[0].NumDescriptors = 1;
-	//descriptorRangeForInstancing[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
-	//descriptorRangeForInstancing[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
-	//
-	//rootParameters[1].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
-	//rootParameters[1].ShaderVisibility = D3D12_SHADER_VISIBILITY_VERTEX;
-	//rootParameters[1].DescriptorTable.pDescriptorRanges = descriptorRangeForInstancing;
-	//rootParameters[1].DescriptorTable.NumDescriptorRanges = _countof(descriptorRangeForInstancing);
-	//-----------------------------
 	D3D12_STATIC_SAMPLER_DESC staticSamplers[1] = {};
 	staticSamplers[0].Filter = D3D12_FILTER_MIN_MAG_MIP_LINEAR;
 	staticSamplers[0].AddressU = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
@@ -1548,6 +1551,66 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 	descriptionRootSignature.pParameters = rootParameters;
 	descriptionRootSignature.NumParameters = _countof(rootParameters);
+
+	//---------------------------------------------------------
+	//	Particle Root Signature
+	//----------------------------------------------------------
+	D3D12_DESCRIPTOR_RANGE particleRangeVS[1] = {};
+	particleRangeVS[0].BaseShaderRegister = 0;
+	particleRangeVS[0].NumDescriptors = 1;
+	particleRangeVS[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
+	particleRangeVS[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+
+	D3D12_DESCRIPTOR_RANGE particleRangePS[1] = {};
+	particleRangePS[0].BaseShaderRegister = 0;
+	particleRangePS[0].NumDescriptors = 1;
+	particleRangePS[0].RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
+	particleRangePS[0].OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+
+	D3D12_ROOT_PARAMETER particleRootParams[3] = {};
+	// [0] VS : StructuredBuffer<<TransformationMatrix> t0
+	particleRootParams[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+	particleRootParams[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_VERTEX;
+	particleRootParams[0].DescriptorTable.pDescriptorRanges = particleRangeVS;
+	particleRootParams[0].DescriptorTable.NumDescriptorRanges = 1;
+	// [1] PS : Material CBV b0
+	particleRootParams[1].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
+	particleRootParams[1].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+	particleRootParams[1].Descriptor.ShaderRegister = 0;
+	// [2] PS Texture t0
+	particleRootParams[2].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+	particleRootParams[2].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+	particleRootParams[2].DescriptorTable.pDescriptorRanges = particleRangePS;
+	particleRootParams[2].DescriptorTable.NumDescriptorRanges = 1;
+
+	D3D12_STATIC_SAMPLER_DESC particleSamplers[1] = {};
+	particleSamplers[0].Filter = D3D12_FILTER_MIN_MAG_MIP_LINEAR;
+	particleSamplers[0].AddressU = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
+	particleSamplers[0].AddressV = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
+	particleSamplers[0].AddressW = D3D12_TEXTURE_ADDRESS_MODE_WRAP;
+	particleSamplers[0].ComparisonFunc = D3D12_COMPARISON_FUNC_NEVER;
+	particleSamplers[0].MaxLOD = D3D12_FLOAT32_MAX;
+	particleSamplers[0].ShaderRegister = 0;
+	particleSamplers[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+
+	D3D12_ROOT_SIGNATURE_DESC particleRootSigDesc{};
+	particleRootSigDesc.Flags = D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
+	particleRootSigDesc.pParameters = particleRootParams;
+	particleRootSigDesc.NumParameters = _countof(particleRootParams);
+	particleRootSigDesc.pStaticSamplers = particleSamplers;
+	particleRootSigDesc.NumStaticSamplers = _countof(particleSamplers);
+
+	ID3DBlob* particleSigBlob = nullptr;
+	ID3DBlob* particleErrBlob = nullptr;
+	hr = D3D12SerializeRootSignature(&particleRootSigDesc, D3D_ROOT_SIGNATURE_VERSION_1, &particleSigBlob, &particleErrBlob);
+	assert(SUCCEEDED(hr));
+
+	Microsoft::WRL::ComPtr<ID3D12RootSignature> particleRootSignature;
+	hr = device->CreateRootSignature(0, particleSigBlob->GetBufferPointer(), particleSigBlob->GetBufferSize(), IID_PPV_ARGS(&particleRootSignature));
+	assert(SUCCEEDED(hr));
+
+	//----------------------------------------------------------
+
 
 	//Index (combine 2 triangles)
 	Microsoft::WRL::ComPtr<ID3D12Resource> indexResourceSprite = CreateBufferResource(device, sizeof(uint32_t) * 6);
@@ -1580,11 +1643,11 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	materialResource->Map(0, nullptr, reinterpret_cast<void**>(&materialData));
 	materialData->color = { 1.0f, 1.0f, 1.0f, 1.0f }; //-----Color of the Triangle--------//
 	materialData->uvTransform = { //---UV Transform of the Triangle----//
-			1.0f, 0.0f, 0.0f, 
+			1.0f, 0.0f, 0.0f,
 			0.0f, 1.0f, 0.0f,
 			0.0f, 0.0f, 1.0f
 	};
-	
+
 	//Material Resource for Lighting 
 	Microsoft::WRL::ComPtr<ID3D12Resource> materialResourceSprite = CreateBufferResource(device, sizeof(Material));
 	materialResourceSprite->SetName(L"materialResourceSprite");
@@ -1611,7 +1674,8 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	float halfLambertPower = 2.0f;
 
 	//Transformation Matrix for Instancing
-	const uint32_t kNumInstance = 10;
+	const uint32_t kNumInstanceMax = 100;
+	uint32_t numInstance = 10;
 
 	ModelData modelDataInstance;
 	modelDataInstance.vertices.push_back({ .position = {1.0f, 1.0f, 0.0f, 1.0f}, .texcoord = {0.0f, 0.0f}, .normal = {0.0f, 0.0f, 1.0f} });	//top left
@@ -1620,7 +1684,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	modelDataInstance.vertices.push_back({ .position = {1.0f, -1.0f, 0.0, 1.0f}, .texcoord = {0.0f, 1.0f}, .normal = {0.0f, 0.0f, 1.0f} });	//bottom left
 	modelDataInstance.vertices.push_back({ .position = {-1.0f, 1.0f, 0.0f, 1.0f}, .texcoord = {1.0f, 0.0f}, .normal = {0.0f, 0.0f, 1.0f} });	//top right
 	modelDataInstance.vertices.push_back({ .position = {-1.0f, -1.0f, 0.0f, 1.0f}, .texcoord = {1.0f, 1.0f}, .normal = {0.0f, 0.0f, 1.0f} });	//bottom right
-	//modelDataParticle.material.textureFilePatch = "./resources/uvChecker.png";
+	//modelDataInstance.material.textureFilePatch = "./resources/uvChecker.png";
 
 	Microsoft::WRL::ComPtr<ID3D12Resource> instanceVertexResource =
 		CreateBufferResource(device, sizeof(VertexData) * modelDataInstance.vertices.size());
@@ -1633,27 +1697,28 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		VertexData* mapped = nullptr;
 		instanceVertexResource->Map(0, nullptr, reinterpret_cast<void**>(&mapped));
 		std::memcpy(mapped, modelDataInstance.vertices.data(),
-			sizeof(VertexData)* modelDataInstance.vertices.size());
+			sizeof(VertexData) * modelDataInstance.vertices.size());
 		instanceVertexResource->Unmap(0, nullptr);
 	}
 
-	WorldTransform transforms[kNumInstance];
-	for (uint32_t index = 0; index < kNumInstance; ++index) {
+	WorldTransform transforms[kNumInstanceMax];
+	float spacing = 0.1f;
+	Vector3 offset = { 0.0f, 0.0f, 0.0f };
+	for (uint32_t index = 0; index < kNumInstanceMax; ++index) {
 		transforms[index].scale = { 1.0f, 1.0f, 1.0f };
 		transforms[index].rotate = { 0.0f, 0.0f, 0.0f };
-		transforms[index].translate = { index * 0.1f, index * 0.1f, index * 0.1f };
+		transforms[index].translate = { index * spacing, index * spacing, index * spacing };
 	}
 
 	Microsoft::WRL::ComPtr<ID3D12Resource> instanceWVPResource =
-		CreateBufferResource(device, sizeof(TransformationMatrix) * kNumInstance);
+		CreateBufferResource(device, sizeof(TransformationMatrix) * kNumInstanceMax);
 	TransformationMatrix* instancingData = nullptr;
 	instanceWVPResource->Map(0, nullptr, reinterpret_cast<void**>(&instancingData));
 
-	for (uint32_t index = 0; index < kNumInstance; ++index) {
+	for (uint32_t index = 0; index < numInstance; ++index) {
 		instancingData[index].WVP = MakeIdentity4x4(instancingData[index].WVP);
 		instancingData[index].World = MakeIdentity4x4(instancingData[index].World);
 	}
-
 
 	//Serialize and make into binary
 	ID3DBlob* signatureBlob = nullptr;
@@ -1716,13 +1781,17 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	rasterizerDesc.ConservativeRaster = D3D12_CONSERVATIVE_RASTERIZATION_MODE_OFF;
 
 	//Shader and Compile
+	// Object3d (Model 1)
 	IDxcBlob* vertexShaderBlob = CompileShader(L"Object3d.VS.hlsl", L"vs_6_0", dxcUtils, dxcCompiler, includeHandler);
-	assert(vertexShaderBlob != nullptr);
-
 	IDxcBlob* pixelShaderBlob = CompileShader(L"Object3d.PS.hlsl", L"ps_6_0", dxcUtils, dxcCompiler, includeHandler);
-	assert(pixelShaderBlob != nullptr);
+	//assert(vertexShaderBlob != nullptr);
+	//assert(pixelShaderBlob != nullptr);
 	assert(vertexShaderBlob && pixelShaderBlob);
-	
+
+	// Particle (Model 2)
+	IDxcBlob* particleVSBlob = CompileShader(L"Particle.VS.hlsl", L"vs_6_0", dxcUtils, dxcCompiler, includeHandler);
+	IDxcBlob* particlePSBlob = CompileShader(L"Particle.PS.hlsl", L"ps_6_0", dxcUtils, dxcCompiler, includeHandler);
+	assert(particleVSBlob && particlePSBlob);
 
 	D3D12_DEPTH_STENCIL_VIEW_DESC dsvDesc{};
 	dsvDesc.Format = DXGI_FORMAT_D24_UNORM_S8_UINT;
@@ -1732,7 +1801,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	//
 	D3D12_DEPTH_STENCIL_DESC depthStencilDesc{};
 	depthStencilDesc.DepthEnable = true;
-	depthStencilDesc.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ZERO;
+	depthStencilDesc.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ALL;
 	depthStencilDesc.DepthFunc = D3D12_COMPARISON_FUNC_LESS_EQUAL;
 	depthStencilDesc.StencilEnable = false;
 
@@ -1757,6 +1826,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
 	graphicsPipelineStateDesc.SampleDesc.Count = 1;
 	graphicsPipelineStateDesc.SampleMask = UINT_MAX; //D3D12_DEFAULT_SAMPLE_MASK;
+
 	//Depth Stencil State
 	graphicsPipelineStateDesc.DepthStencilState = depthStencilDesc;
 	graphicsPipelineStateDesc.DSVFormat = DXGI_FORMAT_D24_UNORM_S8_UINT;
@@ -1766,12 +1836,39 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		D3D12_GRAPHICS_PIPELINE_STATE_DESC psoDesc = graphicsPipelineStateDesc;
 		psoDesc.BlendState = CreateBlendDesc(i);
 
+		// Opaque writes depth; all blend modes do not
+		D3D12_DEPTH_STENCIL_DESC ds = depthStencilDesc;
+		ds.DepthWriteMask = (i == kBlendModeNone)
+			? D3D12_DEPTH_WRITE_MASK_ALL
+			: D3D12_DEPTH_WRITE_MASK_ZERO;
+		psoDesc.DepthStencilState = ds;
+
 		hr = device->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&graphicsPipelineStates[i]));
 		assert(SUCCEEDED(hr));
 	}
 	if (FAILED(hr)) {
 		Log(std::format("PSO作成失敗！ HRESULT = 0x{:08X}\n", static_cast<unsigned int>(hr)));
 		__debugbreak();   // ここで停止
+	}
+
+	//ParticlePipelineStates
+	Microsoft::WRL::ComPtr<ID3D12PipelineState> particlePipelineStates[kCountOfBlendMode];
+	for (int i = 0; i < kCountOfBlendMode; ++i) {
+		D3D12_GRAPHICS_PIPELINE_STATE_DESC psoDesc = graphicsPipelineStateDesc;	//copy base
+		psoDesc.pRootSignature = particleRootSignature.Get();
+		psoDesc.VS = { particleVSBlob->GetBufferPointer(), particleVSBlob->GetBufferSize() };
+		psoDesc.PS = { particlePSBlob->GetBufferPointer(), particlePSBlob->GetBufferSize() };
+		psoDesc.BlendState = CreateBlendDesc(i);
+
+		D3D12_DEPTH_STENCIL_DESC ds = depthStencilDesc;
+		ds.DepthWriteMask = (i == kBlendModeNone)
+			? D3D12_DEPTH_WRITE_MASK_ALL
+			: D3D12_DEPTH_WRITE_MASK_ZERO;
+		psoDesc.DepthStencilState = ds;
+		psoDesc.DSVFormat = DXGI_FORMAT_D24_UNORM_S8_UINT;
+
+		hr = device->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&particlePipelineStates[i]));
+		assert(SUCCEEDED(hr));
 	}
 
 	//Vertex Resource
@@ -1781,13 +1878,13 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	vertexResourceDesc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
 	vertexResourceDesc.Width = sizeof(VertexData) * 6;
 	vertexResourceDesc.Height = 1;
-	
+
 	vertexResourceDesc.DepthOrArraySize = 1;
 	vertexResourceDesc.MipLevels = 1;
 	vertexResourceDesc.SampleDesc.Count = 1;
 	vertexResourceDesc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
 
-	
+
 	//Viewport and Scissor
 	D3D12_VIEWPORT viewport{};
 	viewport.Width = kClientWidth;
@@ -1861,7 +1958,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 	//-------------------Make model data *start*
 
-	
+
 	// Create dedicated WVP constant buffer for sphere
 	Microsoft::WRL::ComPtr<ID3D12Resource> modelWVPResource[2];
 	TransformationMatrix* modelTransformData[2] = {};
@@ -1934,9 +2031,9 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	instancingSrvDesc.ViewDimension = D3D12_SRV_DIMENSION_BUFFER;
 	instancingSrvDesc.Buffer.FirstElement = 0;
 	instancingSrvDesc.Buffer.Flags = D3D12_BUFFER_SRV_FLAG_NONE;
-	instancingSrvDesc.Buffer.NumElements = kNumInstance;
+	instancingSrvDesc.Buffer.NumElements = kNumInstanceMax;
 	instancingSrvDesc.Buffer.StructureByteStride = sizeof(TransformationMatrix);
-	
+
 
 	//Process screen Back Buffer to Front Buffer (Screen Swap)
 	UINT backBufferIndex = swapChain->GetCurrentBackBufferIndex();
@@ -1953,7 +2050,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	D3D12_CPU_DESCRIPTOR_HANDLE textureSrvHandleCPU1 = GetCPUDescriptorHandle(srvDescriptorHeap.Get(), descriptorSizeSRV, 2);
 	D3D12_GPU_DESCRIPTOR_HANDLE textureSrvHandleGPU1 = GetGPUDescriptorHandle(srvDescriptorHeap.Get(), descriptorSizeSRV, 2);
 	device->CreateShaderResourceView(textureResource1.Get(), &srvDesc1, textureSrvHandleCPU1);
-	
+
 	D3D12_CPU_DESCRIPTOR_HANDLE textureSrvHandleCPU2 = GetCPUDescriptorHandle(srvDescriptorHeap.Get(), descriptorSizeSRV, 3);
 	D3D12_GPU_DESCRIPTOR_HANDLE textureSrvHandleGPU2 = GetGPUDescriptorHandle(srvDescriptorHeap.Get(), descriptorSizeSRV, 3);
 	device->CreateShaderResourceView(textureResource2.Get(), &srvDesc2, textureSrvHandleCPU2);
@@ -1968,35 +2065,38 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 	D3D12_CPU_DESCRIPTOR_HANDLE textureSrvHandleCPU5 = GetCPUDescriptorHandle(srvDescriptorHeap.Get(), descriptorSizeSRV, 6);
 	D3D12_GPU_DESCRIPTOR_HANDLE textureSrvHandleGPU5 = GetGPUDescriptorHandle(srvDescriptorHeap.Get(), descriptorSizeSRV, 6);
-	device->CreateShaderResourceView(textureResource5.Get(), &srvDesc5, textureSrvHandleCPU5);///////////////where is srvDesc5???????????????
+	device->CreateShaderResourceView(textureResource5.Get(), &srvDesc5, textureSrvHandleCPU5);
 
-	D3D12_CPU_DESCRIPTOR_HANDLE instancingSrvHandleCPU = GetCPUDescriptorHandle(srvDescriptorHeap.Get(), descriptorSizeSRV, 3);
-	D3D12_GPU_DESCRIPTOR_HANDLE instancingSrvHandleGPU = GetGPUDescriptorHandle(srvDescriptorHeap.Get(), descriptorSizeSRV, 3);
+	// Instance structured buffer SRV for Particle VS (use free descriptor index 7; avoid texture slots)
+	D3D12_CPU_DESCRIPTOR_HANDLE instancingSrvHandleCPU = GetCPUDescriptorHandle(srvDescriptorHeap.Get(), descriptorSizeSRV, 7);
+	D3D12_GPU_DESCRIPTOR_HANDLE instancingSrvHandleGPU = GetGPUDescriptorHandle(srvDescriptorHeap.Get(), descriptorSizeSRV, 7);
 	device->CreateShaderResourceView(instanceWVPResource.Get(), &instancingSrvDesc, instancingSrvHandleCPU);
+
 	//
-	int currentBlendMode = kBlendModeNormal;
+	int currentBlendMode = kBlendModeNone;
 	float clearColor[] = { 0.1f, 0.25f, 0.5f, 1.0f };
 
 	bool isLight = false;
 
-	bool showSprite = true;
+	bool showSprite = false;
 
-	bool showModel1 = true;
-	bool showModel2 = false;
+	bool showModel1 = false;
+	bool showModel2 = true;
 
 	//////////----------select model and texture data -------------------
-	int selectModel[2] = { 0, 1 };
+	int selectModel[2] = { 0, 0 };
 	int modelTexture[2][8] = {
 		{ 0, 0, 0, 0, 0, 0, 0, 0 },
 		{ 0, 0, 0, 0, 0, 0, 0, 0 },
 	};
+
 	WorldTransform transformModel[2] = {
-		{{ 1.0f, 1.0f, 1.0f}, { 0.0f, 0.0f, 0.0f }, {2.0f, 0.0f, 5.0f}},
+		{{ 1.0f, 1.0f, 1.0f}, { 0.0f, 0.0f, 0.0f }, {0.0f, 0.0f, 5.0f}},
 		{{ 1.0f, 1.0f, 1.0f}, { 0.0f, 0.0f, 0.0f }, {-2.0f, 0.0f, 5.0f}},
 	};
 
-	const char* modelNames[] = { "plane.obj", "multiMesh.obj", "axis.obj", "multiMaterial.obj" , "Sphere.obj", "utah_teapot.obj", "bunny.obj", "suzanne.obj", "fence.obj"};
-	const char* textureNames[] = { "uvChecker", "monsterball", "sample", "checkerboard", "grid", "fence"};
+	const char* modelNames[] = { "plane.obj", "multiMesh.obj", "axis.obj", "multiMaterial.obj" , "Sphere.obj", "utah_teapot.obj", "bunny.obj", "suzanne.obj", "fence.obj" };
+	const char* textureNames[] = { "uvChecker", "monsterball", "sample", "checkerboard", "grid", "fence" };
 
 	D3D12_GPU_DESCRIPTOR_HANDLE textureHandles[6] = {
 		textureSrvHandleGPU0,
@@ -2008,8 +2108,8 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	};
 
 	const int kModelCount = 9;
-	
-	ModelData modelData[kModelCount]; 
+
+	ModelData modelData[kModelCount];
 	modelData[0] = LoadObjFile("Resources", "plane.obj");			// [0] 2D PLANE
 	modelData[1] = LoadObjFile("Resources", "multiMesh.obj");		// [1] MULTI-MESH
 	modelData[2] = LoadObjFile("Resources", "axis.obj");			// [2] AXIS
@@ -2018,12 +2118,12 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	modelData[6] = LoadObjFile("Resources", "bunny.obj");			// [6] STANFORD_BUNNY
 	modelData[7] = LoadObjFile("Resources", "suzanne.obj");			// [7] SUZANNE
 	modelData[8] = LoadObjFile("Resources", "fence.obj");			// [8] FENCE
-		{
-			SphereMesh sphere = DrawSphere(16, 1);					// [4] SPHERE
-			modelData[4].vertices = std::move(sphere.vertices);
-		}
-	
-	
+	{
+		SphereMesh sphere = DrawSphere(16, 1);					// [4] SPHERE
+		modelData[4].vertices = std::move(sphere.vertices);
+	}
+
+
 	Microsoft::WRL::ComPtr<ID3D12Resource> modelVertexResources[kModelCount];
 	D3D12_VERTEX_BUFFER_VIEW modelVertexBufferViews[kModelCount];
 
@@ -2055,7 +2155,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	}
 	////////////////-----------------------------------------------
 
-	
+
 	////Fence (Before main loop)
 	Microsoft::WRL::ComPtr<ID3D12Fence> fence = nullptr;
 	uint64_t fenceValue = 0;
@@ -2069,20 +2169,20 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 	hr = commandList->Close();
 	assert(SUCCEEDED(hr));
-	
+
 	//GPU
-	ID3D12CommandList* commandLists[] = { commandList.Get()};
+	ID3D12CommandList* commandLists[] = { commandList.Get() };
 	commandQueue->ExecuteCommandLists(1, commandLists);
 	swapChain->Present(1, 0);
-	
+
 	fenceValue++;
-	
+
 	commandQueue->Signal(fence.Get(), fenceValue);
-	
+
 	//Fence value for GPU
 	if (fence->GetCompletedValue() < fenceValue) {
 		fence->SetEventOnCompletion(fenceValue, fenceEvent);
-	
+
 		WaitForSingleObject(fenceEvent, INFINITE);
 	}
 
@@ -2166,7 +2266,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			//-----	}
 			//-----	debugCamera.Update();
 			//-----}
-			
+
 
 			// === Update ===
 			//transform.rotate.y += 0.03f;  
@@ -2207,15 +2307,15 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 				modelTransformData[i]->WVP = Multiply(world, Multiply(viewMatrix, projectionMatrix));
 				modelTransformData[i]->World = world;
 			}
-			
+
 			//UV Transform
-		
+
 			materialSpriteData->uvTransform = MakeUVTransformMatrix(uvTransformSprite);
 
 			//if (Input::GetInstance()->TriggerKey(DIK_SPACE))
 			//SoundPlayWave(xAudio2.Get(), soundData1);
 
-			
+
 			//BYTE key[256] = {};
 			//if (key[DIK_0]) {
 			//	OutputDebugStringA("Hit 0\n");
@@ -2226,25 +2326,32 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			//bool the moment a key is pressed (uint8_t [key #]
 			//prevents negative values and limitted to [0 - 255]
 
-		//instancing
-		for (uint32_t index = 0; index < kNumInstance; ++index) {
-			Matrix4x4 worldMatrix = MakeAffineMatrix(transforms[index].scale, transforms[index].rotate, transforms[index].translate);
+		// Instancing matrices for Model 2 (Particle) — perspective camera + Model 2 parent transform
+			if (numInstance < 1) numInstance = 1;
+			if (numInstance > kNumInstanceMax) numInstance = kNumInstanceMax;
 
-			Matrix4x4 viewProjectionMatrix = MakeOrthographicMatrix(0.0f, 0.0f, float(kClientWidth), float(kClientHeight), 0.0f, 100.0f);
-			Matrix4x4 worldViewProjectionMatrix = Multiply(worldMatrix, viewProjectionMatrix);
-			instancingData[index].WVP = worldViewProjectionMatrix;
-			instancingData[index].World = worldMatrix;
-		}
+			for (uint32_t index = 0; index < numInstance; ++index) {
+				WorldTransform t = transforms[index];
+				t.translate.x += index * offset.x;
+				t.translate.y += index * offset.y;
+				t.translate.z += index * offset.z;
+
+				Matrix4x4 local = MakeAffineMatrix(t.scale, t.rotate, t.translate);
+
+				Matrix4x4 parent = MakeAffineMatrix(
+					transformModel[1].scale,
+					transformModel[1].rotate,
+					transformModel[1].translate);
+
+				Matrix4x4 world = Multiply(local, parent);
+				instancingData[index].World = world;
+				instancingData[index].WVP = Multiply(world, Multiply(viewMatrix, projectionMatrix));
+			}
 
 #ifdef USE_IMGUI
 			//ImGui::ShowDemoWindow();
 
-			ImGui::Begin("Editor");
-			//ImGui::Checkbox("Show 2D Sprite", &showSprite);
-			//ImGui::Checkbox("Show Model 1", &showModel1);
-			//ImGui::Checkbox("Show Model 2", &showModel2);
-			ImGui::Separator();
-			ImGui::Text("UV Transform (Shared to Model and Sprite)");
+			ImGui::Begin("UV Editor (Shared to Model and Sprite)");
 			// UV Transform
 			ImGui::DragFloat2("UVScale", &uvTransformSprite.scale.x, 0.01f, -10.0f, 10.0f);
 			ImGui::SliderAngle("UVRotate", &uvTransformSprite.rotate.z);
@@ -2254,7 +2361,9 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 				uvTransformSprite.rotate = { 0.0f, 0.0f, 0.0f };
 				uvTransformSprite.translate = { 0.0f, 0.0f, 0.0f };
 			}
-			ImGui::Separator();
+			ImGui::End();
+
+			ImGui::Begin("Sprite and Model Editor");
 			ImGui::Checkbox("Enable Sprite", &showSprite);
 			// --------- Sprite (visible when enabled) -------
 			if (showSprite) {
@@ -2285,12 +2394,21 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			ImGui::Separator();
 			/////// ----- Model 2 (only when active) -----
 			ImGui::Checkbox("Enable Model 2", &showModel2);
-			
+
 			if (showModel2) {
 				ImGui::PushID(1);
 				ImGui::Text("Model 2");
 				ImGui::Combo("Select Model", &selectModel[1], modelNames, IM_ARRAYSIZE(modelNames));
 				ImGui::Combo("Texture", &modelTexture[1][selectModel[1]], textureNames, IM_ARRAYSIZE(textureNames));
+				ImGui::Separator();
+				ImGui::Text("Number of Instances");
+				ImGui::InputInt("", reinterpret_cast<int*>(&numInstance), 1, (int)kNumInstanceMax);
+				ImGui::DragFloat3("offset", &offset.x, 0.01f, -5.0f, 5.0f);
+				if (ImGui::Button("Reset Instancing")) {
+					numInstance = 10;
+					offset = { 0.0f, 0.0f, 0.0f };
+				}
+				ImGui::Separator();
 				ImGui::DragFloat3("Scale", &transformModel[1].scale.x, 0.01f, 0.1f, 10.0f);
 				ImGui::DragFloat3("Rotation", &transformModel[1].rotate.x, 0.03f, -10.0f, 10.0f);
 				ImGui::DragFloat3("Position", &transformModel[1].translate.x, 0.01f, -10.0f, 10.0f);
@@ -2303,29 +2421,31 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			ImGui::Checkbox("enableLighting", &isLight);
 			if (isLight) {
 				materialSpriteData->enableLighting = 1;
+
+				const char* lightingModes[] = { "Lambert", "Half-Lambert" };
+				ImGui::Combo("Lighting Mode", &materialSpriteData->lightingMode, lightingModes, IM_ARRAYSIZE(lightingModes));
+
+				//if (materialSpriteData->lightingMode == 1) {
+				//	ImGui::DragFloat("HalfLambert Power", &materialSpriteData->halfLambertPower, 0.05f, 0.5f, 8.0f);
+				//}
+				ImGui::ColorEdit4("Material Color", &materialSpriteData->color.x);
+
+				ImGui::ColorEdit4("LightColor", &directionalLightData->color.x);
+				ImGui::DragFloat3("LightDirection", &directionalLightData->direction.x, 0.01f, -10.0f, 10.0f);
+				ImGui::DragFloat("Intensity", &directionalLightData->intensity, 0.01f, 0.0f, 3.0f);
+				if (ImGui::Button("Reset Lighting")) {
+					materialSpriteData->color = { 1.0f, 1.0f, 1.0f, 1.0f };
+					directionalLightData->color = { 1.0f, 1.0f, 1.0f, 1.0f };
+					directionalLightData->direction = { 0.0f, -1.0f, 2.0f };
+					directionalLightData->intensity = 1.0f;
+					materialSpriteData->lightingMode = 1;
+					materialSpriteData->halfLambertPower = 2.0f;
+				}
 			}
 			else {
 				materialSpriteData->enableLighting = 0;
 			}
-			const char* lightingModes[] = { "Lambert", "Half-Lambert" };
-			ImGui::Combo("Lighting Mode", &materialSpriteData->lightingMode, lightingModes, IM_ARRAYSIZE(lightingModes));
 
-			//if (materialSpriteData->lightingMode == 1) {
-			//	ImGui::DragFloat("HalfLambert Power", &materialSpriteData->halfLambertPower, 0.05f, 0.5f, 8.0f);
-			//}
-			ImGui::ColorEdit4("Material Color", &materialSpriteData->color.x);
-
-			ImGui::ColorEdit4("LightColor", &directionalLightData->color.x);
-			ImGui::DragFloat3("LightDirection", &directionalLightData->direction.x, 0.01f, -10.0f, 10.0f);
-			ImGui::DragFloat("Intensity", &directionalLightData->intensity, 0.01f, 0.0f, 3.0f);
-			if (ImGui::Button("Reset Lighting")) {
-				materialSpriteData->color = { 1.0f, 1.0f, 1.0f, 1.0f };
-				directionalLightData->color = { 1.0f, 1.0f, 1.0f, 1.0f };
-				directionalLightData->direction = { 0.0f, -1.0f, 2.0f };
-				directionalLightData->intensity = 1.0f;
-				materialSpriteData->lightingMode = 1;
-				materialSpriteData->halfLambertPower = 2.0f;
-			}
 			//ImGui::Separator();
 			//ImGui::Text("Debug Camera");
 			//ImGui::Checkbox("useDebugCamera", &useDebugCamera);
@@ -2340,13 +2460,13 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 			ImGui::End();
 
-			
+
 			ImGui::Begin("Blend Settings");
 			ImGui::ColorEdit4("Clear Color", clearColor);
-			const char* blendModeNames[] = { "None", "Normal", "Add", "Subtract", "Multiply", "Screen"};
-			ImGui::Combo("Blend Mode", &currentBlendMode , blendModeNames, IM_ARRAYSIZE(blendModeNames));
+			const char* blendModeNames[] = { "None", "Normal", "Add", "Subtract", "Multiply", "Screen" };
+			ImGui::Combo("Blend Mode", &currentBlendMode, blendModeNames, IM_ARRAYSIZE(blendModeNames));
 			if (ImGui::Button("Reset Blend Mode")) {
-				currentBlendMode = kBlendModeNormal;
+				currentBlendMode = kBlendModeNone;
 				clearColor[0] = 0.1f;
 				clearColor[1] = 0.25f;
 				clearColor[2] = 0.5f;
@@ -2356,7 +2476,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			//satety clamp
 			if (currentBlendMode < 0) currentBlendMode = 0;
 			if (currentBlendMode >= kCountOfBlendMode) currentBlendMode = kCountOfBlendMode - 1;
-			
+
 			ImGui::End();
 
 			ImGui::Render();
@@ -2384,14 +2504,14 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			commandList->SetPipelineState(graphicsPipelineStates[currentBlendMode].Get());
 
 			//set descriptor heap (required for ImGui)
-			ID3D12DescriptorHeap* descriptorHeaps[] = { srvDescriptorHeap.Get()};
+			ID3D12DescriptorHeap* descriptorHeaps[] = { srvDescriptorHeap.Get() };
 			commandList->SetDescriptorHeaps(_countof(descriptorHeaps), descriptorHeaps);
 
 			// Material and Texture are shared
 			commandList->SetGraphicsRootConstantBufferView(1, materialResourceSprite->GetGPUVirtualAddress());
 			commandList->SetGraphicsRootConstantBufferView(3, materialResourceLight->GetGPUVirtualAddress());
 			//commandList->SetGraphicsRootDescriptorTable(2, textureHandles[modelTexture[selectModel]]);
-			
+
 
 			// ---- safety clamps (put this once, before the if(showModel1) / if(showModel2) )
 			const int numModels = IM_ARRAYSIZE(modelNames);  /* size of modelData / modelNames */
@@ -2408,6 +2528,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 			//// 2. ModelData
 			if (showModel1) {
+
 				int idx = selectModel[0];
 				if (modelData[idx].vertices.size() > 0 && modelVertexResources[idx]) {
 					commandList->SetGraphicsRootConstantBufferView(0, modelWVPResource[0]->GetGPUVirtualAddress());
@@ -2424,15 +2545,26 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 				modelTexture[1][selectModel[1]]).c_str());
 
 			if (showModel2) {
+				// Particle root : [0] = VS structured buffer, [1] = PS material, [2] = PS texture
+				commandList->SetGraphicsRootSignature(particleRootSignature.Get());
+				commandList->SetPipelineState(particlePipelineStates[currentBlendMode].Get());
+
+				commandList->SetGraphicsRootDescriptorTable(0, instancingSrvHandleGPU);
+				commandList->SetGraphicsRootConstantBufferView(1, materialResourceSprite->GetGPUVirtualAddress());
+
 				int idx = selectModel[1];
 				if (modelData[idx].vertices.size() > 0 && modelVertexResources[idx]) {
-					commandList->SetGraphicsRootConstantBufferView(0, modelWVPResource[1]->GetGPUVirtualAddress());
 					commandList->SetGraphicsRootDescriptorTable(2, textureHandles[modelTexture[1][idx]]);
 					commandList->IASetVertexBuffers(0, 1, &modelVertexBufferViews[idx]);
 					commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-					commandList->DrawInstanced(UINT(modelData[idx].vertices.size()), 1, 0, 0); //change 1 to instanceCount (Particle )
+					commandList->DrawInstanced(UINT(modelData[idx].vertices.size()), numInstance, 0, 0); //change 1 to kNumInstance (Particle )
 				}
 			}
+			// Switch back to Object3d for sprite
+			commandList->SetGraphicsRootSignature(rootSignature.Get());
+			commandList->SetPipelineState(graphicsPipelineStates[currentBlendMode].Get());
+			commandList->SetGraphicsRootConstantBufferView(1, materialResourceSprite->GetGPUVirtualAddress());
+			commandList->SetGraphicsRootConstantBufferView(3, materialResourceLight->GetGPUVirtualAddress());
 
 			//// 3. Draw Sprite - Orthographic (2D overlay)
 			if (showSprite) {
@@ -2444,40 +2576,10 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 				commandList->DrawInstanced(6, 1, 0, 0);
 			}
 
-			//// 4. instancing (lots of flat polygons)
-			//for (number of Particles) {
-			//	commandList->SetGraphicsRootDescriptorTable(1, instancingSrvHandleGPU);
-			//	commandList->DrawInstanced(UINT(modelData.vertices.size()), kNumInstance, 0, 0);
-			//}
-			//commandList->SetGraphicsRootSignature(rootSignature.Get());
-			//commandList->SetPipelineState(graphicsPipelineStates[currentBlendMode].Get());
-			//
-			//commandList->SetGraphicsRootConstantBufferView(0, instancingResource->GetGPUVirtualAddress());
-			//commandList->SetGraphicsRootDescriptorTable(1, instancingSrvHandleGPU);	//structured buffer
-			//commandList->SetGraphicsRootDescriptorTable(2, textureHandles[0]);	//texture
-			//commandList->SetGraphicsRootConstantBufferView(3, materialResourceLight->GetGPUVirtualAddress());
-			//
-			commandList->IASetVertexBuffers(0, 1, &instanceVertexBufferView);
-			commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
-			for (uint32_t i = 0; i < kNumInstance; ++i) {
-				D3D12_GPU_VIRTUAL_ADDRESS addr = instanceWVPResource->GetGPUVirtualAddress() + i * sizeof(TransformationMatrix);
-
-				commandList->SetGraphicsRootConstantBufferView(0, addr);
-				commandList->SetGraphicsRootDescriptorTable(2, textureHandles[0]);
-				commandList->DrawIndexedInstanced(6, 1, 0, 0, 0);
-			}
-			//commandList->DrawInstanced(UINT(modelDataInstance.vertices.size()), kNumInstance, 0, 0);	//6 vertices + #of Instances
-			//
-			//for (int i = 0; i < numTextures; ++i) {
-			//	OutputDebugStringA(std::format("textureHandles[{}] = 0x{:X}\n",
-			//		i, textureHandles[i].ptr).c_str());
-			//}
-
-			
-		#ifdef USE_IMGUI
+#ifdef USE_IMGUI
 			ImGui_ImplDX12_RenderDrawData(ImGui::GetDrawData(), commandList.Get());
-		#endif
+#endif
 
 			// Transition back to Present
 			barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_RENDER_TARGET;
@@ -2487,7 +2589,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			commandList->Close();
 
 			// Execute
-			ID3D12CommandList* commandLists[] = { commandList.Get()};
+			ID3D12CommandList* commandLists[] = { commandList.Get() };
 			commandQueue->ExecuteCommandLists(1, commandLists);
 
 			swapChain->Present(1, 0);
@@ -2515,7 +2617,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	ImGui_ImplWin32_Shutdown();
 	ImGui::DestroyContext();
 #endif
-	
+
 	//Close Handle / Close Window
 	CloseHandle(fenceEvent);
 
@@ -2577,15 +2679,17 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 	for (int i = 0; i < kCountOfBlendMode; ++i) {
 		graphicsPipelineStates[i].Reset();
+		particlePipelineStates[i].Reset();
 	}
 	rootSignature.Reset();
+	particleRootSignature.Reset();
 
 	commandList.Reset();
 	commandAllocator.Reset();
 	commandQueue.Reset();
 	fence.Reset();
 
-	swapChain.Reset();          
+	swapChain.Reset();
 	device.Reset();             // last
 
 	// ---- Input ----
@@ -2599,31 +2703,35 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	if (dxcUtils)       dxcUtils->Release();
 	if (vertexShaderBlob) vertexShaderBlob->Release();
 	if (pixelShaderBlob)  pixelShaderBlob->Release();
+	if (particleVSBlob) particleVSBlob->Release();
+	if (particlePSBlob) particlePSBlob->Release();
 	if (signatureBlob)    signatureBlob->Release();
 	if (errorBlob)        errorBlob->Release();
+	if (particleSigBlob) particleSigBlob->Release();
+	if (particleErrBlob) particleErrBlob->Release();
 
 	delete input;
 
 
-//#ifdef _DEBUG
-//	Microsoft::WRL::ComPtr<IDXGIDebug1> debug;
-//	if (SUCCEEDED(DXGIGetDebugInterface1(0, IID_PPV_ARGS(&debug)))) {
-//		debug->ReportLiveObjects(DXGI_DEBUG_ALL, DXGI_DEBUG_RLO_ALL);
-//		debug->ReportLiveObjects(DXGI_DEBUG_APP, DXGI_DEBUG_RLO_ALL);
-//		debug->ReportLiveObjects(DXGI_DEBUG_D3D12, DXGI_DEBUG_RLO_ALL);
-//		debug->Release();
-//	}
-//#endif
-//
-//#ifdef _DEBUG
-//	debugController->Release();
-//#endif
-//#ifdef _DEBUG
-//	Microsoft::WRL::ComPtr<IDXGIDebug1> dxgiDebug;
-//	if (SUCCEEDED(DXGIGetDebugInterface1(0, IID_PPV_ARGS(&dxgiDebug)))) {
-//		dxgiDebug->ReportLiveObjects(DXGI_DEBUG_ALL, DXGI_DEBUG_RLO_DETAIL);
-//	}
-//#endif
+	//#ifdef _DEBUG
+	//	Microsoft::WRL::ComPtr<IDXGIDebug1> debug;
+	//	if (SUCCEEDED(DXGIGetDebugInterface1(0, IID_PPV_ARGS(&debug)))) {
+	//		debug->ReportLiveObjects(DXGI_DEBUG_ALL, DXGI_DEBUG_RLO_ALL);
+	//		debug->ReportLiveObjects(DXGI_DEBUG_APP, DXGI_DEBUG_RLO_ALL);
+	//		debug->ReportLiveObjects(DXGI_DEBUG_D3D12, DXGI_DEBUG_RLO_ALL);
+	//		debug->Release();
+	//	}
+	//#endif
+	//
+	//#ifdef _DEBUG
+	//	debugController->Release();
+	//#endif
+	//#ifdef _DEBUG
+	//	Microsoft::WRL::ComPtr<IDXGIDebug1> dxgiDebug;
+	//	if (SUCCEEDED(DXGIGetDebugInterface1(0, IID_PPV_ARGS(&dxgiDebug)))) {
+	//		dxgiDebug->ReportLiveObjects(DXGI_DEBUG_ALL, DXGI_DEBUG_RLO_DETAIL);
+	//	}
+	//#endif
 
 	CoUninitialize();
 	CloseWindow(hwnd);
