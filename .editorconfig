@@ -1,4 +1,4 @@
-[*.{cpp,h}]
+[*.{cpp,h,hlsl,hlsli}]
 charset = utf-8
 
 spelling_error_severity = error
@@ -10,3 +10,6 @@ spelling_languages = en-us
 spelling_use_default_exclusion_dictionary = true
 
 spelling_exclusion_path = ./exclusion.dic
+
+[externals/**]
+generated_code = true

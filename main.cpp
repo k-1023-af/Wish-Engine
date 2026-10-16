@@ -238,59 +238,6 @@ ModelData LoadObjFile(const std::string& directoryPath, const std::string& filen
 			s >> normal.x >> normal.y >> normal.z;
 			normals.push_back(normal);
 		}
-		//else if (identifier == "f") {
-		//	//Triangle only (use something else for other shapes)
-		//	VertexData triangle[3];
-		//	int validVertices = 0;
-		//	
-		//	for (int32_t faceVertex = 0; faceVertex < 3; ++faceVertex) {
-		//		std::string vertexDefinition;
-		//
-		//		if (!(s >> vertexDefinition)) break;   // not enough tokens
-		//
-		//		//[position/UV/Vector]
-		//		std::istringstream v(vertexDefinition);
-		//		uint32_t elementIndices[3] = { 0,0,0 };
-		//
-		//		for (int32_t element = 0; element < 3; ++element) {
-		//			std::string index;
-		//			std::getline(v, index, '/');
-		//			if (!index.empty()) {
-		//				try {
-		//					elementIndices[element] = static_cast<uint32_t>(std::stoi(index));
-		//				}
-		//				catch (...) {
-		//					elementIndices[element] = 0;
-		//				}
-		//			}
-		//		}
-		//		if (elementIndices[0] == 0 || elementIndices[0] > positions.size()) {
-		//			continue;   // skip this vertex
-		//		}
-		//		// Load vertices, normals, texture coordinates, and material data from the OBJ file
-		//		Vector4 position = positions[elementIndices[0] - 1];
-		//		position.x *= 1.0f;
-		//
-		//		Vector2 texcoord = { 0.0f, 0.0f };
-		//		if (elementIndices[1] > 0 && elementIndices[1] <= texcoords.size()) {
-		//			texcoord = texcoords[elementIndices[1] - 1];
-		//			texcoord.y = 1.0f - texcoord.y; // flip V
-		//		}
-		//
-		//		Vector3 normal = { 0.0f, 0.0f, 1.0f };
-		//		if (elementIndices[2] > 0 && elementIndices[2] <= normals.size()) {
-		//			normal = normals[elementIndices[2] - 1];
-		//			normal.x *= -1.0f; // keep your existing flip
-		//		}
-		//		VertexData vertex = { position, texcoord, normal };
-		//		modelData.vertices.push_back(vertex);
-		//		triangle[faceVertex] = vertex;
-		//	}
-		//	modelData.vertices.push_back(triangle[2]);
-		//	modelData.vertices.push_back(triangle[1]);
-		//	modelData.vertices.push_back(triangle[0]);
-		//}
-
 		//supports triangles, quads and genreal convex n-gons
 		else if (identifier == "f") {
 			std::vector<VertexData> faceVerts;

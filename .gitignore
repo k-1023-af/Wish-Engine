@@ -360,4 +360,20 @@ DirectXGame/imgui.ini
 # DirectXTex Compiled Shaders
 **/DirectXTex/Shaders/Compiled/
 
+# exclude from repository
 git rm --cached <01_Project.vcxproj.user>
+
+#ignore version control
+*.log
+/logs
+
+*.dmp
+Dumps/
+
+imgui.ini
+
+!resources/**/*.obj
+ReadMe(test1).md
+01_Project.exe
+ReadMe.md
+dxcompiler.dll
