@@ -18,16 +18,16 @@ void DebugCamera::Update()
 
 	Vector3 move = { 0.0f, 0.0f, 0.0f }; //default movement
 	
-	extern BYTE gKeys[256];
+	//extern BYTE gKeys[256];
 
 	//const float deltaTime = (1.0f / 60.0f);
 
-	if (gKeys[DIK_A]) move.x -= moveSpeed.x;	//	left	(x axis)
-	if (gKeys[DIK_D]) move.x += moveSpeed.x;	//	right	(x axis)
-	if (gKeys[DIK_W]) move.z += moveSpeed.z;	//	forward	(z axis)
-	if (gKeys[DIK_S]) move.z -= moveSpeed.z;	//	back	(z axis)
-	if (gKeys[DIK_Q]) move.y -= moveSpeed.y;	//	down	(y axis)
-	if (gKeys[DIK_E]) move.y += moveSpeed.y;	//	up		(y axis)
+	//if (gKeys[DIK_A]) move.x -= moveSpeed.x;	//	left	(x axis)
+	//if (gKeys[DIK_D]) move.x += moveSpeed.x;	//	right	(x axis)
+	//if (gKeys[DIK_W]) move.z += moveSpeed.z;	//	forward	(z axis)
+	//if (gKeys[DIK_S]) move.z -= moveSpeed.z;	//	back	(z axis)
+	//if (gKeys[DIK_Q]) move.y -= moveSpeed.y;	//	down	(y axis)
+	//if (gKeys[DIK_E]) move.y += moveSpeed.y;	//	up		(y axis)
 
 	///-------------------translate----------------///
 
