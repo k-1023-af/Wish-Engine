@@ -793,26 +793,7 @@ WorldTransform uvTransformSprite = {
 	{ 0.0f, 0.0f, 0.0f },  // translate
 };
 
-BYTE gKeys[256] = {};
-DIMOUSESTATE gMouseState = {};
-//LPDIRECTINPUT8 gDirectInput = nullptr;
-//LPDIRECTINPUTDEVICE8 gKeyboard = nullptr;
-//LPDIRECTINPUTDEVICE8 gMouse = nullptr;
 
-//
-//void InitializeInput(HWND hwnd) {
-//	DirectInput8Create(GetModuleHandle(nullptr), DIRECTINPUT_VERSION, IID_IDirectInput8, (void**)&gDirectInput, nullptr);
-//
-//	// Keyboard
-//	gDirectInput->CreateDevice(GUID_SysKeyboard, &gKeyboard, nullptr);
-//	gKeyboard->SetDataFormat(&c_dfDIKeyboard);
-//	gKeyboard->SetCooperativeLevel(hwnd, DISCL_FOREGROUND | DISCL_NONEXCLUSIVE);
-//
-//	// Mouse
-//	gDirectInput->CreateDevice(GUID_SysMouse, &gMouse, nullptr);
-//	gMouse->SetDataFormat(&c_dfDIMouse);
-//	gMouse->SetCooperativeLevel(hwnd, DISCL_FOREGROUND | DISCL_EXCLUSIVE);
-//}
 
 
 // Forward declarations to fix C3861: 'ConvertString' identifier not found
@@ -1272,9 +1253,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	DebugCamera debugCamera;
 	debugCamera.Initialize();
 
-	Input* input = nullptr;
-	input = new Input();
-	input->Initialize();
+	
 
 	///------SOUND DATA END----------
 
@@ -1323,6 +1302,11 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	//ウインドウの表示する
 	ShowWindow(hwnd, SW_SHOW);
 	//ShowCursor(TRUE);
+
+	Input* input = nullptr;
+	input = new Input();
+	input->Initialize(wc.hInstance, hwnd);
+
 
 	Microsoft::WRL::ComPtr<IDXGIFactory7> dxgiFactory = nullptr;
 	//HRESULTはWindows系のエラーコードであり、
@@ -1392,33 +1376,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 #endif
 
-	//----////////DirectX Initialize process
-	//----
-	//----///DirectInput Setup
-	//----IDirectInput8* directInput = nullptr;
-	//----hr = DirectInput8Create(wc.hInstance, DIRECTINPUT_VERSION, IID_IDirectInput8, (void**)&directInput, nullptr);
-	//----assert(SUCCEEDED(hr));
-	//----
-	//----//Keyboard
-	//----IDirectInputDevice8* keyboard = nullptr;
-	//----hr = directInput->CreateDevice(GUID_SysKeyboard, &keyboard, NULL);
-	//----assert(SUCCEEDED(hr));
-	//----hr = keyboard->SetDataFormat(&c_dfDIKeyboard);
-	//----assert(SUCCEEDED(hr));
-	//----hr = keyboard->SetCooperativeLevel(hwnd, DISCL_FOREGROUND | DISCL_NONEXCLUSIVE | DISCL_NOWINKEY);
-	//----assert(SUCCEEDED(hr));
-	//----
-	//----// Mouse
-	//----IDirectInputDevice8* mouse = nullptr;
-	//----hr = directInput->CreateDevice(GUID_SysMouse, &mouse, nullptr);
-	//----assert(SUCCEEDED(hr));
-	//----hr = mouse->SetDataFormat(&c_dfDIMouse);
-	//----assert(SUCCEEDED(hr));
-	//----hr = mouse->SetCooperativeLevel(hwnd, DISCL_FOREGROUND | DISCL_NONEXCLUSIVE);
-	//----assert(SUCCEEDED(hr));
-	//----
-	//----ShowCursor(TRUE);
-	//----ClipCursor(NULL);
+	
 
 
 	//dxCompiler initialization (Before main loop)
@@ -2220,54 +2178,11 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			ImGui_ImplWin32_NewFrame();
 			ImGui::NewFrame();
 #endif
-
-			//-----// ====== Sound and Camera Input ======== //
-			//-----static BYTE prevKeys[256] = {};
-			//-----keyboard->Acquire();
-			//-----keyboard->GetDeviceState(sizeof(gKeys), gKeys);
-			//-----
-			//-----// Toggle between Debug and Regular camera (Press SPACE)
-			//-----bool spaceKeyPressed = (gKeys[DIK_SPACE] & 0x80) && !(prevKeys[DIK_SPACE] & 0x80);
-			//-----memcpy(prevKeys, gKeys, sizeof(prevKeys));
-			//-----
-			//-----if (spaceKeyPressed) {  // Key just pressed
-			//-----	//useDebugCamera = !useDebugCamera;
-			//-----	isSoundPlaying = !isSoundPlaying;
-			//-----	SoundPlayWave(xAudio2.Get(), soundData1, isSoundPlaying);
-			//-----}
-			//-----
-			//-----mouse->Acquire();
-			//-----HRESULT hr = mouse->GetDeviceState(sizeof(DIMOUSESTATE), &gMouseState);
-
-
-			//-----float mouseDeltaX = 0;
-			//-----float mouseDeltaY = 0;
-			//-----float mouseDeltaZ = (float)gMouseState.lZ; //wheel
-			//-----
-			//-----bool isLeftClick = false;
-			//-----bool isRightClick = false;
-			//-----
-			//-----if (SUCCEEDED(hr)) {
-			//-----	mouseDeltaX = (float)gMouseState.lX;
-			//-----	mouseDeltaY = (float)gMouseState.lY;
-			//-----	isLeftClick = (gMouseState.rgbButtons[0] & 0x80) != 0;
-			//-----	isRightClick = (gMouseState.rgbButtons[1] & 0x80) != 0;
-			//-----}
-			//-----
-			//-----if (useDebugCamera) {
-			//-----	if (isLeftClick) {
-			//-----		debugCamera.SetMouseDelta(mouseDeltaX, mouseDeltaY);      // Yaw + Pitch
-			//-----	}
-			//-----	if (isRightClick) {
-			//-----		debugCamera.SetMouseRollDelta(mouseDeltaX);          // Roll with horizontal drag
-			//-----	}
-			//-----	if (mouseDeltaZ != 0) {
-			//-----		debugCamera.SetMouseWheelDelta(mouseDeltaZ);      // Optional: forward movement
-			//-----	}
-			//-----	debugCamera.Update();
-			//-----}
-			
-
+			input->Update();
+			if (input->TriggerKey(DIK_0)) {
+				OutputDebugStringA("Hit 0\n");
+			}
+		
 			// === Update ===
 			//transform.rotate.y += 0.03f;  
 
@@ -2312,19 +2227,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		
 			materialSpriteData->uvTransform = MakeUVTransformMatrix(uvTransformSprite);
 
-			//if (Input::GetInstance()->TriggerKey(DIK_SPACE))
-			//SoundPlayWave(xAudio2.Get(), soundData1);
-
 			
-			//BYTE key[256] = {};
-			//if (key[DIK_0]) {
-			//	OutputDebugStringA("Hit 0\n");
-			//}
-
-			//key input (Trigger) process
-			//bool is the key being pressed? (uint8_t [key #]
-			//bool the moment a key is pressed (uint8_t [key #]
-			//prevents negative values and limitted to [0 - 255]
 
 		// Instancing matrices for Model 2 (Particle) — perspective camera + Model 2 parent transform
 			if (numInstance < 1) numInstance = 1;
@@ -2539,10 +2442,10 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 				}
 			}
 
-			OutputDebugStringA(std::format("Model2 idx={} verts={} tex={}\n",
-				selectModel[1],
-				modelData[selectModel[1]].vertices.size(),
-				modelTexture[1][selectModel[1]]).c_str());
+			//OutputDebugStringA(std::format("Model2 idx={} verts={} tex={}\n",		///// -------------outputs data to the DebugString
+			//	selectModel[1],
+			//	modelData[selectModel[1]].vertices.size(),
+			//	modelTexture[1][selectModel[1]]).c_str());
 
 			if (showModel2) {
 				// Particle root : [0] = VS structured buffer, [1] = PS material, [2] = PS texture
