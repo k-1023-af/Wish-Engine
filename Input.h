@@ -19,9 +19,13 @@ public:
 	void Initialize(HINSTANCE hInstance, HWND hwnd);
 	void Update();
 
-	
+	bool PushKey(BYTE keyNumber);
+	bool TriggerKey(BYTE keynumber);
 
 private:
+	BYTE key[256] = {};
+	BYTE keyPre[256] = {};
+
 	ComPtr<IDirectInput8> directInput = nullptr;
 	ComPtr<IDirectInputDevice8> keyboard = nullptr;
 	ComPtr<IDirectInputDevice8> mouse = nullptr;
@@ -33,7 +37,6 @@ private:
 	//LPDIRECTINPUT8 gDirectInput = nullptr;
 	//LPDIRECTINPUTDEVICE8 gKeyboard = nullptr;
 	//LPDIRECTINPUTDEVICE8 gMouse = nullptr;
-
 
 };
 

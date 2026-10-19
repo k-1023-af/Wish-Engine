@@ -2179,6 +2179,9 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			ImGui::NewFrame();
 #endif
 			input->Update();
+			if (input->TriggerKey(DIK_0)) {
+				OutputDebugStringA("Hit 0\n");
+			}
 		
 			// === Update ===
 			//transform.rotate.y += 0.03f;  
@@ -2439,10 +2442,10 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 				}
 			}
 
-			OutputDebugStringA(std::format("Model2 idx={} verts={} tex={}\n",
-				selectModel[1],
-				modelData[selectModel[1]].vertices.size(),
-				modelTexture[1][selectModel[1]]).c_str());
+			//OutputDebugStringA(std::format("Model2 idx={} verts={} tex={}\n",		///// -------------outputs data to the DebugString
+			//	selectModel[1],
+			//	modelData[selectModel[1]].vertices.size(),
+			//	modelTexture[1][selectModel[1]]).c_str());
 
 			if (showModel2) {
 				// Particle root : [0] = VS structured buffer, [1] = PS material, [2] = PS texture
