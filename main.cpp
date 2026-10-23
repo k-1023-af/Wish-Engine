@@ -19,6 +19,7 @@
 #include <cmath>
 #include <xaudio2.h>
 #include "DebugCamera.h"
+#include <random>
 //#define DIRECTINPUT_VERSION	0x800
 //#include <dinput.h>
 #include <wrl.h>
@@ -105,6 +106,18 @@ struct Material {
 	float halfLambertPower;
 	float padding;
 	Matrix4x4 uvTransform;
+};
+
+struct Particle {
+	WorldTransform transform;
+	Vector3 velocity;
+	Vector4 color;
+};
+
+struct ParticleForGPU {
+	Matrix4x4 WVP;
+	Matrix4x4 World;
+	Vector4 color;
 };
 
 struct ChunkHeader {
@@ -446,7 +459,6 @@ void SoundPlayWave(IXAudio2* xAudio2, const SoundData& soundData, bool play) {
 }
 
 
-
 Matrix4x4 MakeIdentity4x4(Matrix4x4& matrix) {
 	for (int i = 0; i < 4; ++i) {
 		for (int j = 0; j < 4; ++j) {
@@ -775,6 +787,18 @@ Vector4 Transform(const Vector4& v, const Matrix4x4& m) {
 	return result;
 }
 
+Particle MakeNewParticle(std::mt19937& randomEngine) {
+	std::uniform_real_distribution<float> distribution(-1.0f, 1.0f);
+	Particle particle;
+	particle.transform.scale = { 1.0f, 1.0f, 1.0f };
+	particle.transform.rotate = { 0.0f, 0.0f, 0.0f };
+	particle.transform.translate = { distribution(randomEngine), distribution(randomEngine), distribution(randomEngine) };
+	particle.velocity = { distribution(randomEngine), distribution(randomEngine), distribution(randomEngine) };
+	std::uniform_real_distribution<float> distribution(-1.0f, 1.0f);
+	particle.color = { distribution(randomEngine), distribution(randomEngine), distribution(randomEngine), 1.0f };
+	return particle;
+}
+
 WorldTransform transform = {
 	{ 1.0f, 1.0f, 1.0f }, // scale
 	{ 0.0f, 0.0f, 0.0f }, // rotate
@@ -793,8 +817,9 @@ WorldTransform uvTransformSprite = {
 	{ 0.0f, 0.0f, 0.0f },  // translate
 };
 
-
-
+const float kDeltaTime = 1.0f / 60.0f;
+std::random_device seedGenerator;
+std::mt19937 randomEngine(seedGenerator());
 
 // Forward declarations to fix C3861: 'ConvertString' identifier not found
 std::wstring ConvertString(const std::string& str);
@@ -1659,14 +1684,25 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		instanceVertexResource->Unmap(0, nullptr);
 	}
 
-	WorldTransform transforms[kNumInstanceMax];
+	Particle particles[kNumInstanceMax];
+	bool isUpdate = false;
 	float spacing = 0.1f;
 	Vector3 offset = { 0.0f, 0.0f, 0.0f };
 	for (uint32_t index = 0; index < kNumInstanceMax; ++index) {
-		transforms[index].scale = { 1.0f, 1.0f, 1.0f };
-		transforms[index].rotate = { 0.0f, 0.0f, 0.0f };
-		transforms[index].translate = { index * spacing, index * spacing, index * spacing };
+		//particles[index].transform.scale = { 1.0f, 1.0f, 1.0f };
+		//particles[index].transform.rotate = { 0.0f, 0.0f, 0.0f };
+		//particles[index].transform.translate = { index * spacing, index * spacing, index * spacing };
+		//particles[index].velocity = { 0.0f, 1.0f, 0.0f };
+
+		particles[index] = MakeNewParticle(randomEngine);
 	}
+
+	std::uniform_real_distribution<float> distribution(-1.0f, 1.0f);
+	for (uint32_t index = 0; index < kNumInstanceMax; ++index) {
+		particles[index].transform.translate = {distribution(randomEngine), distribution(randomEngine), distribution(randomEngine)};
+		particles[index].velocity = { distribution(randomEngine), distribution(randomEngine), distribution(randomEngine) };
+	}
+
 
 	Microsoft::WRL::ComPtr<ID3D12Resource> instanceWVPResource =
 		CreateBufferResource(device, sizeof(TransformationMatrix) * kNumInstanceMax);
@@ -2234,12 +2270,12 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			if (numInstance > kNumInstanceMax) numInstance = kNumInstanceMax;
 		
 		for (uint32_t index = 0; index < numInstance; ++index) {
-			WorldTransform t = transforms[index];
-			t.translate.x += index * offset.x;
-			t.translate.y += index * offset.y;
-			t.translate.z += index * offset.z;
+			Particle t = particles[index];
+			t.transform.translate.x += particles[index].velocity.x * kDeltaTime;
+			t.transform.translate.y += particles[index].velocity.y * kDeltaTime;
+			t.transform.translate.z += particles[index].velocity.z * kDeltaTime;
 
-			Matrix4x4 local = MakeAffineMatrix(t.scale, t.rotate, t.translate);
+			Matrix4x4 local = MakeAffineMatrix(t.transform.scale, t.transform.rotate, t.transform.translate);
 
 			Matrix4x4 parent = MakeAffineMatrix(
 				transformModel[1].scale,
@@ -2278,7 +2314,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 				}
 			}
 			ImGui::Separator();
-			// ----- Model 1 (always visible) -----
+			// ----- Model 1 (6 vertex obj  model) -----
 			ImGui::Checkbox("Enable Model 1", &showModel1);
 
 			if (showModel1) {
@@ -2295,7 +2331,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 				ImGui::PopID();
 			}
 			ImGui::Separator();
-			/////// ----- Model 2 (only when active) -----
+			/////// ----- Model 2 (vertex obj model with instancing) -----
 			ImGui::Checkbox("Enable Model 2", &showModel2);
 			
 			if (showModel2) {
@@ -2312,11 +2348,25 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 					offset = { 0.0f, 0.0f, 0.0f };
 				}
 				ImGui::Separator();
+				ImGui::Checkbox("Update", &isUpdate);
+				if (isUpdate) {
+					for (uint32_t index = 0; index < kNumInstanceMax; ++index) {
+						particles[index].transform.translate.x += particles[index].velocity.x * kDeltaTime;
+						particles[index].transform.translate.y += particles[index].velocity.y * kDeltaTime;
+						particles[index].transform.translate.z += particles[index].velocity.z * kDeltaTime;
+					}
+				}
+				ImGui::Separator();
 				ImGui::DragFloat3("Scale", &transformModel[1].scale.x, 0.01f, 0.1f, 10.0f);
 				ImGui::DragFloat3("Rotation", &transformModel[1].rotate.x, 0.03f, -10.0f, 10.0f);
 				ImGui::DragFloat3("Position", &transformModel[1].translate.x, 0.01f, -10.0f, 10.0f);
 				if (ImGui::Button("Reset Transform")) {
-					transformModel[1] = { {1,1,1}, {0,0,0}, {-2,0,5} };
+					for (uint32_t index = 0; index < kNumInstanceMax; ++index) {
+						particles[index].transform.translate = { index * spacing, index * spacing, index * spacing };
+						//particles[index].transform = { {1.0f,1.0f,1.0f}, {0.0f,0.0f,0.0f}, {-2.0f,0.0f,5.0f} };
+						//particles[index].transform.translate = { distribution(randomEngine), distribution(randomEngine), distribution(randomEngine) };
+						particles[index].velocity = { distribution(randomEngine), distribution(randomEngine), distribution(randomEngine) };
+					}
 				}
 				ImGui::PopID();
 			}

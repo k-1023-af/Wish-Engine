@@ -20,7 +20,7 @@ public:
 	void Update();
 
 	bool PushKey(BYTE keyNumber);
-	bool TriggerKey(BYTE keynumber);
+	bool TriggerKey(BYTE keyNumber);
 
 private:
 	BYTE key[256] = {};

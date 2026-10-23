@@ -12,11 +12,13 @@ void Input::Initialize(HINSTANCE hInstance, HWND hwnd) {
 	hr = directInput->CreateDevice(GUID_SysKeyboard, &keyboard, NULL);
 	hr = keyboard->SetDataFormat(&c_dfDIKeyboard);
 	hr = keyboard->SetCooperativeLevel(hwnd, DISCL_FOREGROUND | DISCL_NONEXCLUSIVE | DISCL_NOWINKEY);
+	assert(SUCCEEDED(hr));
 
 	// Mouse
 	hr = directInput->CreateDevice(GUID_SysMouse, &mouse, nullptr);
 	hr = mouse->SetDataFormat(&c_dfDIMouse);
 	hr = mouse->SetCooperativeLevel(hwnd, DISCL_FOREGROUND | DISCL_NONEXCLUSIVE);
+	assert(SUCCEEDED(hr));
 
 }
 
@@ -30,6 +32,8 @@ void Input::Update() {
 	//	OutputDebugStringA("Hit 0\n");
 	//}
 
+	//mouse->Acquire();
+
 }
 
 bool Input::PushKey(BYTE keyNumber) { 
@@ -37,7 +41,7 @@ bool Input::PushKey(BYTE keyNumber) {
 	return false; 
 }
 
-bool Input::TriggerKey(BYTE keynumber) {
-	if (key[keynumber] && !keyPre[keynumber]) { return true; }
+bool Input::TriggerKey(BYTE keyNumber) {
+	if (key[keyNumber] && !keyPre[keyNumber]) { return true; }
 	return false;
 }
