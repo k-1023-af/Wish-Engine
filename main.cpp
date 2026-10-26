@@ -794,7 +794,6 @@ Particle MakeNewParticle(std::mt19937& randomEngine) {
 	particle.transform.rotate = { 0.0f, 0.0f, 0.0f };
 	particle.transform.translate = { distribution(randomEngine), distribution(randomEngine), distribution(randomEngine) };
 	particle.velocity = { distribution(randomEngine), distribution(randomEngine), distribution(randomEngine) };
-	std::uniform_real_distribution<float> distribution(-1.0f, 1.0f);
 	particle.color = { distribution(randomEngine), distribution(randomEngine), distribution(randomEngine), 1.0f };
 	return particle;
 }
@@ -1705,8 +1704,8 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 
 	Microsoft::WRL::ComPtr<ID3D12Resource> instanceWVPResource =
-		CreateBufferResource(device, sizeof(TransformationMatrix) * kNumInstanceMax);
-	TransformationMatrix* instancingData = nullptr;
+		CreateBufferResource(device, sizeof(ParticleForGPU) * kNumInstanceMax);
+	ParticleForGPU* instancingData = nullptr;
 	instanceWVPResource->Map(0, nullptr, reinterpret_cast<void**>(&instancingData));
 
 	for (uint32_t index = 0; index < numInstance; ++index) {
@@ -2026,7 +2025,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	instancingSrvDesc.Buffer.FirstElement = 0;
 	instancingSrvDesc.Buffer.Flags = D3D12_BUFFER_SRV_FLAG_NONE;
 	instancingSrvDesc.Buffer.NumElements = kNumInstanceMax;
-	instancingSrvDesc.Buffer.StructureByteStride = sizeof(TransformationMatrix);
+	instancingSrvDesc.Buffer.StructureByteStride = sizeof(ParticleForGPU);
 	
 
 	//Process screen Back Buffer to Front Buffer (Screen Swap)
@@ -2270,12 +2269,15 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			if (numInstance > kNumInstanceMax) numInstance = kNumInstanceMax;
 		
 		for (uint32_t index = 0; index < numInstance; ++index) {
-			Particle t = particles[index];
-			t.transform.translate.x += particles[index].velocity.x * kDeltaTime;
-			t.transform.translate.y += particles[index].velocity.y * kDeltaTime;
-			t.transform.translate.z += particles[index].velocity.z * kDeltaTime;
-
-			Matrix4x4 local = MakeAffineMatrix(t.transform.scale, t.transform.rotate, t.transform.translate);
+			if (isUpdate) {
+				particles[index].transform.translate.x += particles[index].velocity.x * kDeltaTime;
+				particles[index].transform.translate.y += particles[index].velocity.y * kDeltaTime;
+				particles[index].transform.translate.z += particles[index].velocity.z * kDeltaTime;
+			}
+			Matrix4x4 local = MakeAffineMatrix(
+				particles[index].transform.scale, 
+				particles[index].transform.rotate, 
+				particles[index].transform.translate);
 
 			Matrix4x4 parent = MakeAffineMatrix(
 				transformModel[1].scale,
@@ -2285,6 +2287,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			Matrix4x4 world = Multiply(local, parent);
 			instancingData[index].World = world;
 			instancingData[index].WVP = Multiply(world, Multiply(viewMatrix, projectionMatrix));
+			instancingData[index].color = particles[index].color;
 		}
 
 #ifdef USE_IMGUI
@@ -2362,9 +2365,9 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 				ImGui::DragFloat3("Position", &transformModel[1].translate.x, 0.01f, -10.0f, 10.0f);
 				if (ImGui::Button("Reset Transform")) {
 					for (uint32_t index = 0; index < kNumInstanceMax; ++index) {
-						particles[index].transform.translate = { index * spacing, index * spacing, index * spacing };
-						//particles[index].transform = { {1.0f,1.0f,1.0f}, {0.0f,0.0f,0.0f}, {-2.0f,0.0f,5.0f} };
-						//particles[index].transform.translate = { distribution(randomEngine), distribution(randomEngine), distribution(randomEngine) };
+						//particles[index].transform.translate = { index * spacing, index * spacing, index * spacing };
+						particles[index].transform = { {1.0f,1.0f,1.0f}, {0.0f,0.0f,0.0f}, {-2.0f,0.0f,5.0f} };
+						particles[index].transform.translate = { distribution(randomEngine), distribution(randomEngine), distribution(randomEngine) };
 						particles[index].velocity = { distribution(randomEngine), distribution(randomEngine), distribution(randomEngine) };
 					}
 				}
