@@ -20,6 +20,7 @@
 #include <xaudio2.h>
 #include "DebugCamera.h"
 #include <random>
+#include "WinApp.h"
 //#define DIRECTINPUT_VERSION	0x800
 //#include <dinput.h>
 #include <wrl.h>
