@@ -112,6 +112,8 @@ struct Particle {
 	WorldTransform transform;
 	Vector3 velocity;
 	Vector4 color;
+	float lifeTime;
+	float currentTime;
 };
 
 struct ParticleForGPU {
@@ -1656,7 +1658,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	float halfLambertPower = 2.0f;
 
 	//Transformation Matrix for Instancing
-	const uint32_t kNumInstanceMax = 100;
+	const uint32_t kNumInstanceMax = 20;
 	uint32_t numInstance = 10;
 
 	ModelData modelDataInstance;
@@ -1694,6 +1696,10 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		//particles[index].velocity = { 0.0f, 1.0f, 0.0f };
 
 		particles[index] = MakeNewParticle(randomEngine);
+
+		std::uniform_real_distribution<float> distTime(1.0f, 3.0f);
+		particles[index].lifeTime = distTime(randomEngine);
+		particles[index].currentTime = 0;
 	}
 
 	std::uniform_real_distribution<float> distribution(-1.0f, 1.0f);
@@ -2066,7 +2072,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	device->CreateShaderResourceView(instanceWVPResource.Get(), &instancingSrvDesc, instancingSrvHandleCPU);
 
 	//
-	int currentBlendMode = kBlendModeNone;
+	int currentBlendMode = kBlendModeNormal;
 	float clearColor[] = { 0.1f, 0.25f, 0.5f, 1.0f };
 
 	bool isLight = false;
@@ -2267,13 +2273,19 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		// Instancing matrices for Model 2 (Particle) — perspective camera + Model 2 parent transform
 			if (numInstance < 1) numInstance = 1;
 			if (numInstance > kNumInstanceMax) numInstance = kNumInstanceMax;
-		
-		for (uint32_t index = 0; index < numInstance; ++index) {
-			if (isUpdate) {
+
+		for (uint32_t index = 0; index < kNumInstanceMax; ++index) {
+			
+			if (particles[index].lifeTime <= particles[index].currentTime) { continue; }
 				particles[index].transform.translate.x += particles[index].velocity.x * kDeltaTime;
 				particles[index].transform.translate.y += particles[index].velocity.y * kDeltaTime;
 				particles[index].transform.translate.z += particles[index].velocity.z * kDeltaTime;
-			}
+
+				particles[index].currentTime += kDeltaTime;
+
+				float alpha = 1.0f - (particles[index].currentTime / particles[index].lifeTime);
+				if (alpha < 0.0f) alpha = 0;
+			
 			Matrix4x4 local = MakeAffineMatrix(
 				particles[index].transform.scale, 
 				particles[index].transform.rotate, 
@@ -2287,7 +2299,13 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			Matrix4x4 world = Multiply(local, parent);
 			instancingData[index].World = world;
 			instancingData[index].WVP = Multiply(world, Multiply(viewMatrix, projectionMatrix));
-			instancingData[index].color = particles[index].color;
+			instancingData[index].color = {
+				particles[index].color.x,
+				particles[index].color.y,
+				particles[index].color.z,
+				alpha
+			};
+			++numInstance;
 		}
 
 #ifdef USE_IMGUI
@@ -2366,9 +2384,12 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 				if (ImGui::Button("Reset Transform")) {
 					for (uint32_t index = 0; index < kNumInstanceMax; ++index) {
 						//particles[index].transform.translate = { index * spacing, index * spacing, index * spacing };
-						particles[index].transform = { {1.0f,1.0f,1.0f}, {0.0f,0.0f,0.0f}, {-2.0f,0.0f,5.0f} };
-						particles[index].transform.translate = { distribution(randomEngine), distribution(randomEngine), distribution(randomEngine) };
-						particles[index].velocity = { distribution(randomEngine), distribution(randomEngine), distribution(randomEngine) };
+						//particles[index].transform = { {1.0f,1.0f,1.0f}, {0.0f,0.0f,0.0f}, {-2.0f,0.0f,5.0f} };
+						//particles[index].transform.translate = { distribution(randomEngine), distribution(randomEngine), distribution(randomEngine) };
+						//particles[index].velocity = { distribution(randomEngine), distribution(randomEngine), distribution(randomEngine) };
+
+						//particles[index] = MakeNewParticle(randomEngine);
+						//numInstance = 0;
 					}
 				}
 				ImGui::PopID();
@@ -2491,7 +2512,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 					commandList->SetGraphicsRootDescriptorTable(2, textureHandles[modelTexture[0][idx]]);
 					commandList->IASetVertexBuffers(0, 1, &modelVertexBufferViews[idx]);
 					commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-					commandList->DrawInstanced(UINT(modelData[idx].vertices.size()), 1, 0, 0);
+					commandList->DrawInstanced(UINT(modelData[idx].vertices.size()), numInstance, 0, 0);
 				}
 			}
 
