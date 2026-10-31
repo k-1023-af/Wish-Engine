@@ -1,5 +1,4 @@
 #include <Windows.h>
-#include <cstdint>
 #include <string>
 #include <format>
 #include <filesystem>
@@ -49,9 +48,6 @@ extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg
 
 #pragma comment(lib, "dinput8.lib")
 #pragma comment(lib, "dxguid.lib")
-
-const int32_t kClientWidth = 1280;
-const int32_t kClientHeight = 720;
 
 struct Vector2 {
 	float x, y;
@@ -152,6 +148,8 @@ struct ModelData {
 struct SphereMesh {
 	std::vector<VertexData> vertices;
 };
+
+WinApp* winApp = nullptr;
 
 float pi = 3.14f;
 
@@ -1264,13 +1262,13 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 	SetUnhandledExceptionFilter(ExportDump);
 
-	CoInitializeEx(0, COINIT_MULTITHREADED);
+	HRESULT hr = CoInitializeEx(0, COINIT_MULTITHREADED);
 
 	/////-----SOUND DATA---------
 	Microsoft::WRL::ComPtr<IXAudio2> xAudio2;
 	IXAudio2MasteringVoice* masterVoice;
 
-	HRESULT hr = XAudio2Create(&xAudio2, 0, XAUDIO2_DEFAULT_PROCESSOR);
+	hr = XAudio2Create(&xAudio2, 0, XAUDIO2_DEFAULT_PROCESSOR);
 
 	hr = xAudio2->CreateMasteringVoice(&masterVoice);
 	assert(SUCCEEDED(hr));
@@ -1280,6 +1278,8 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	DebugCamera debugCamera;
 	debugCamera.Initialize();
 
+	winApp = new WinApp();
+	winApp->Initialize();
 	
 
 	///------SOUND DATA END----------
@@ -1293,15 +1293,6 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 //	}
 //endif
 
-	WNDCLASS wc{};
-
-	wc.lpfnWndProc = WindowProc;
-	wc.lpszClassName = L"CG2WindowClass";
-	wc.hInstance = GetModuleHandle(nullptr);
-	wc.hCursor = LoadCursor(nullptr, IDC_ARROW);
-
-	RegisterClass(&wc);
-
 	OutputDebugStringA("Hello,DirectX!\n");
 
 	Log(std::format("now:{:%Y/%m/%d %H:%M:%S}\n", localTime));
@@ -1310,29 +1301,10 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 	Log(logStream, std::format("start time (local time): {:%Y/%m/%d %H:%M:%S}", localTime));
 
-	RECT wrc = { 0,0,kClientWidth,kClientHeight };
-	AdjustWindowRect(&wrc, WS_OVERLAPPEDWINDOW, false);
-
-	HWND hwnd = CreateWindow(
-		wc.lpszClassName,		//利用するクラス名
-		L"LE2C_21_ファルコン_エブラハム",		//タイトルバーの文字　（何でもよい)
-		WS_OVERLAPPEDWINDOW,	//よく見るウインドウスタイル
-		CW_USEDEFAULT,			//表示X座標　（Windowsに任せる）
-		CW_USEDEFAULT,			//表示Y座標　（Windowsに任せる）
-		wrc.right - wrc.left,	//ウインドウ横幅
-		wrc.bottom - wrc.top,	//ウインドウ縦幅
-		nullptr,				//親ウインドウハンドル
-		nullptr,				//メニューハンドル
-		wc.hInstance,			//インスタンスハンドル
-		nullptr);				//オプション
-
-	//ウインドウの表示する
-	ShowWindow(hwnd, SW_SHOW);
-	//ShowCursor(TRUE);
 
 	Input* input = nullptr;
 	input = new Input();
-	input->Initialize(wc.hInstance, hwnd);
+	input->Initialize(winApp);
 
 
 	Microsoft::WRL::ComPtr<IDXGIFactory7> dxgiFactory = nullptr;
@@ -1488,7 +1460,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	swapChainDesc.BufferCount = 2;
 	swapChainDesc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
 	//create by passing a command queue and window handle
-	hr = dxgiFactory->CreateSwapChainForHwnd(commandQueue.Get(), hwnd, &swapChainDesc, nullptr, nullptr, reinterpret_cast<IDXGISwapChain1**>(swapChain.GetAddressOf()));
+	hr = dxgiFactory->CreateSwapChainForHwnd(commandQueue.Get(), winApp->GetHwnd(), &swapChainDesc, nullptr, nullptr, reinterpret_cast<IDXGISwapChain1**>(swapChain.GetAddressOf()));
 	assert(SUCCEEDED(hr));
 
 	/*---------------PSO (Pipeline State Object)---------------*/
@@ -2190,7 +2162,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	IMGUI_CHECKVERSION();
 	ImGui::CreateContext();
 	ImGui::StyleColorsDark();
-	ImGui_ImplWin32_Init(hwnd);
+	ImGui_ImplWin32_Init(winApp->GetHwnd());
 	ImGui_ImplDX12_Init(device.Get(),
 		swapChainDesc.BufferCount,
 		rtvDesc.Format,
@@ -2208,13 +2180,11 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 	Log("Complete create D3D12Device!!!\n");
 
-	MSG msg{};
-	while (msg.message != WM_QUIT) {
-		if (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE)) {
-			TranslateMessage(&msg);
-			DispatchMessage(&msg);
+	while (true) {
+		if (winApp->ProcessMessage()) {
+			break;
 		}
-		else {
+
 #ifdef USE_IMGUI
 			ImGui_ImplDX12_NewFrame();
 			ImGui_ImplWin32_NewFrame();
@@ -2384,13 +2354,14 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 				ImGui::DragFloat3("Position", &transformModel[1].translate.x, 0.01f, -10.0f, 10.0f);
 				if (ImGui::Button("Reset Transform")) {
 					for (uint32_t index = 0; index < kNumInstanceMax; ++index) {
-						//particles[index].transform.translate = { index * spacing, index * spacing, index * spacing };
-						//particles[index].transform = { {1.0f,1.0f,1.0f}, {0.0f,0.0f,0.0f}, {-2.0f,0.0f,5.0f} };
-						//particles[index].transform.translate = { distribution(randomEngine), distribution(randomEngine), distribution(randomEngine) };
-						//particles[index].velocity = { distribution(randomEngine), distribution(randomEngine), distribution(randomEngine) };
+						particles[index].transform.translate = { index * spacing, index * spacing, index * spacing };
+						particles[index].transform = { {1.0f,1.0f,1.0f}, {0.0f,0.0f,0.0f}, {-2.0f,0.0f,5.0f} };
+						particles[index].transform.translate = { distribution(randomEngine), distribution(randomEngine), distribution(randomEngine) };
+						particles[index].velocity = { distribution(randomEngine), distribution(randomEngine), distribution(randomEngine) };
+						particles[index].color = { 1.0f, 1.0f, 1.0f, 1.0f };
 
-						//particles[index] = MakeNewParticle(randomEngine);
-						//numInstance = 0;
+						particles[index] = MakeNewParticle(randomEngine);
+						numInstance = 0;
 					}
 				}
 				ImGui::PopID();
@@ -2587,7 +2558,6 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			hr = commandList->Reset(commandAllocator.Get(), nullptr);
 			assert(SUCCEEDED(hr));
 
-		}
 	}
 
 #ifdef USE_IMGUI
@@ -2688,8 +2658,14 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	if (particleSigBlob) particleSigBlob->Release();
 	if (particleErrBlob) particleErrBlob->Release();
 
+	winApp->Finalize();
+
+	delete winApp;
+	winApp = nullptr;
+	
 	delete input;
 
+	
 
 //#ifdef _DEBUG
 //	Microsoft::WRL::ComPtr<IDXGIDebug1> debug;
@@ -2711,9 +2687,8 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 //	}
 //#endif
 
-	CoUninitialize();
-	CloseWindow(hwnd);
+	
+	
 
 	return 0;
 }
-
