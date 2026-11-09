@@ -1,34 +1,48 @@
 #include "Input.h"
-#include <cassert>
 
-void Input::Initialize() {
-//
-//	///DirectInput Setup
-//	Microsoft::WRL::ComPtr<IDirectInput8> directInput = nullptr;
-//	hr = DirectInput8Create(wc.hInstance, DIRECTINPUT_VERSION, IID_IDirectInput8, (void**)&directInput, nullptr);
-//	assert(SUCCEEDED(hr));
-//
-//	//Keyboard
-//	Microsoft::WRL::ComPtr<IDirectInputDevice8> keyboard = nullptr;
-//	hr = directInput->CreateDevice(GUID_SysKeyboard, &keyboard, NULL);
-//	assert(SUCCEEDED(hr));
-//	hr = keyboard->SetDataFormat(&c_dfDIKeyboard);
-//	assert(SUCCEEDED(hr));
-//	hr = keyboard->SetCooperativeLevel(hwnd, DISCL_FOREGROUND | DISCL_NONEXCLUSIVE | DISCL_NOWINKEY);
-//	assert(SUCCEEDED(hr));
-//
-//	//// Mouse
-//	//Microsoft::WRL::ComPtr<IDirectInputDevice8> mouse = nullptr;
-//	//hr = directInput->CreateDevice(GUID_SysMouse, &mouse, nullptr);
-//	//assert(SUCCEEDED(hr));
-//	//hr = mouse->SetDataFormat(&c_dfDIMouse);
-//	//assert(SUCCEEDED(hr));
-//	//hr = mouse->SetCooperativeLevel(hwnd, DISCL_FOREGROUND | DISCL_NONEXCLUSIVE);
-//	//assert(SUCCEEDED(hr));
-//
-//
+
+void Input::Initialize(WinApp* winApp) {
+	this->winApp_ = winApp;
+
+	HRESULT hr;
+
+	///DirectInput Setup
+	hr = DirectInput8Create(winApp->GetHInstance(), DIRECTINPUT_VERSION, IID_IDirectInput8, (void**)&directInput, nullptr);
+	
+	//Keyboard
+	hr = directInput->CreateDevice(GUID_SysKeyboard, &keyboard, NULL);
+	hr = keyboard->SetDataFormat(&c_dfDIKeyboard);
+	hr = keyboard->SetCooperativeLevel(winApp->GetHwnd(), DISCL_FOREGROUND | DISCL_NONEXCLUSIVE | DISCL_NOWINKEY);
+	assert(SUCCEEDED(hr));
+
+	// Mouse
+	hr = directInput->CreateDevice(GUID_SysMouse, &mouse, nullptr);
+	hr = mouse->SetDataFormat(&c_dfDIMouse);
+	hr = mouse->SetCooperativeLevel(winApp->GetHwnd(), DISCL_FOREGROUND | DISCL_NONEXCLUSIVE);
+	assert(SUCCEEDED(hr));
+
 }
 
-void Input::Update()
-{
+void Input::Update() {
+	memcpy(keyPre, key, sizeof(key));
+
+	keyboard->Acquire();
+	keyboard->GetDeviceState(sizeof(key), key);
+
+	//if (key[DIK_0]) {
+	//	OutputDebugStringA("Hit 0\n");
+	//}
+
+	//mouse->Acquire();
+
+}
+
+bool Input::PushKey(BYTE keyNumber) { 
+	if (key[keyNumber]) { return true; }
+	return false; 
+}
+
+bool Input::TriggerKey(BYTE keyNumber) {
+	if (key[keyNumber] && !keyPre[keyNumber]) { return true; }
+	return false;
 }

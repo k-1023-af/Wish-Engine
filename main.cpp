@@ -51,9 +51,6 @@ extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg
 #pragma comment(lib, "dinput8.lib")
 #pragma comment(lib, "dxguid.lib")
 
-const int32_t kClientWidth = 1280;
-const int32_t kClientHeight = 720;
-
 struct Vector2 {
 	float x, y;
 };
@@ -160,6 +157,8 @@ struct ModelData {
 struct SphereMesh {
 	std::vector<VertexData> vertices;
 };
+
+WinApp* winApp = nullptr;
 
 float pi = 3.14f;
 
@@ -808,6 +807,17 @@ Vector4 Transform(const Vector4& v, const Matrix4x4& m) {
 	return result;
 }
 
+Particle MakeNewParticle(std::mt19937& randomEngine) {
+	std::uniform_real_distribution<float> distribution(-1.0f, 1.0f);
+	Particle particle;
+	particle.transform.scale = { 1.0f, 1.0f, 1.0f };
+	particle.transform.rotate = { 0.0f, 0.0f, 0.0f };
+	particle.transform.translate = { distribution(randomEngine), distribution(randomEngine), distribution(randomEngine) };
+	particle.velocity = { distribution(randomEngine), distribution(randomEngine), distribution(randomEngine) };
+	particle.color = { distribution(randomEngine), distribution(randomEngine), distribution(randomEngine), 1.0f };
+	return particle;
+}
+
 WorldTransform transform = {
 	{ 1.0f, 1.0f, 1.0f }, // scale
 	{ 0.0f, 0.0f, 0.0f }, // rotate
@@ -825,6 +835,10 @@ WorldTransform uvTransformSprite = {
 	{ 0.0f, 0.0f, 0.0f }, // rotate
 	{ 0.0f, 0.0f, 0.0f },  // translate
 };
+
+const float kDeltaTime = 1.0f / 60.0f;
+std::random_device seedGenerator;
+std::mt19937 randomEngine(seedGenerator());
 
 BYTE gKeys[256] = {};
 DIMOUSESTATE gMouseState = {};
@@ -1305,9 +1319,13 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	DebugCamera debugCamera;
 	debugCamera.Initialize();
 
+	winApp = new WinApp();
+	winApp->Initialize();
+
+
 	Input* input = nullptr;
 	input = new Input();
-	input->Initialize();
+	input->Initialize(winApp);
 
 	///------SOUND DATA END----------
 
@@ -1337,24 +1355,24 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 	Log(logStream, std::format("start time (local time): {:%Y/%m/%d %H:%M:%S}", localTime));
 
-	RECT wrc = { 0,0,kClientWidth,kClientHeight };
-	AdjustWindowRect(&wrc, WS_OVERLAPPEDWINDOW, false);
+	//RECT wrc = { 0,0,kClientWidth,kClientHeight };
+	//AdjustWindowRect(&wrc, WS_OVERLAPPEDWINDOW, false);
 
-	HWND hwnd = CreateWindow(
-		wc.lpszClassName,		//利用するクラス名
-		L"LE2C_21_ファルコン_エブラハム",		//タイトルバーの文字　（何でもよい)
-		WS_OVERLAPPEDWINDOW,	//よく見るウインドウスタイル
-		CW_USEDEFAULT,			//表示X座標　（Windowsに任せる）
-		CW_USEDEFAULT,			//表示Y座標　（Windowsに任せる）
-		wrc.right - wrc.left,	//ウインドウ横幅
-		wrc.bottom - wrc.top,	//ウインドウ縦幅
-		nullptr,				//親ウインドウハンドル
-		nullptr,				//メニューハンドル
-		wc.hInstance,			//インスタンスハンドル
-		nullptr);				//オプション
+	//HWND hwnd = CreateWindow(
+	//	wc.lpszClassName,		//利用するクラス名
+	//	L"LE2C_21_ファルコン_エブラハム",		//タイトルバーの文字　（何でもよい)
+	//	WS_OVERLAPPEDWINDOW,	//よく見るウインドウスタイル
+	//	CW_USEDEFAULT,			//表示X座標　（Windowsに任せる）
+	//	CW_USEDEFAULT,			//表示Y座標　（Windowsに任せる）
+	//	wrc.right - wrc.left,	//ウインドウ横幅
+	//	wrc.bottom - wrc.top,	//ウインドウ縦幅
+	//	nullptr,				//親ウインドウハンドル
+	//	nullptr,				//メニューハンドル
+	//	wc.hInstance,			//インスタンスハンドル
+	//	nullptr);				//オプション
 
 	//ウインドウの表示する
-	ShowWindow(hwnd, SW_SHOW);
+	//ShowWindow(hwnd, SW_SHOW);
 	//ShowCursor(TRUE);
 
 	Microsoft::WRL::ComPtr<IDXGIFactory7> dxgiFactory = nullptr;
@@ -1541,7 +1559,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	swapChainDesc.BufferCount = 2;
 	swapChainDesc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
 	//create by passing a command queue and window handle
-	hr = dxgiFactory->CreateSwapChainForHwnd(commandQueue.Get(), hwnd, &swapChainDesc, nullptr, nullptr, reinterpret_cast<IDXGISwapChain1**>(swapChain.GetAddressOf()));
+	hr = dxgiFactory->CreateSwapChainForHwnd(commandQueue.Get(), winApp->GetHwnd(), &swapChainDesc, nullptr, nullptr, reinterpret_cast<IDXGISwapChain1**>(swapChain.GetAddressOf()));
 	assert(SUCCEEDED(hr));
 
 	/*---------------PSO (Pipeline State Object)---------------*/
@@ -1739,13 +1757,27 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		instanceVertexResource->Unmap(0, nullptr);
 	}
 
-	WorldTransform transforms[kNumInstanceMax];
+	Particle particles[kNumInstanceMax];
+	bool isUpdate = false;
 	float spacing = 0.1f;
 	Vector3 offset = { 0.0f, 0.0f, 0.0f };
 	for (uint32_t index = 0; index < kNumInstanceMax; ++index) {
-		transforms[index].scale = { 1.0f, 1.0f, 1.0f };
-		transforms[index].rotate = { 0.0f, 0.0f, 0.0f };
-		transforms[index].translate = { index * spacing, index * spacing, index * spacing };
+		//particles[index].transform.scale = { 1.0f, 1.0f, 1.0f };
+		//particles[index].transform.rotate = { 0.0f, 0.0f, 0.0f };
+		//particles[index].transform.translate = { index * spacing, index * spacing, index * spacing };
+		
+
+		particles[index] = MakeNewParticle(randomEngine);
+
+		std::uniform_real_distribution<float> distTime(1.0f, 3.0f);
+		particles[index].lifeTime = distTime(randomEngine);
+		particles[index].currentTime = 0;
+	}
+
+	std::uniform_real_distribution<float> distribution(-1.0f, 1.0f);
+	for (uint32_t index = 0; index < kNumInstanceMax; ++index) {
+		particles[index].transform.translate = { distribution(randomEngine), distribution(randomEngine), distribution(randomEngine) };
+		particles[index].velocity = { distribution(randomEngine), distribution(randomEngine), distribution(randomEngine) };
 	}
 
 	Microsoft::WRL::ComPtr<ID3D12Resource> instanceWVPResource =
@@ -2241,7 +2273,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	IMGUI_CHECKVERSION();
 	ImGui::CreateContext();
 	ImGui::StyleColorsDark();
-	ImGui_ImplWin32_Init(hwnd);
+	ImGui_ImplWin32_Init(winApp->GetHwnd());
 	ImGui_ImplDX12_Init(device.Get(),
 		swapChainDesc.BufferCount,
 		rtvDesc.Format,
@@ -2353,18 +2385,18 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		////////
 
 		// Instancing matrices for Model 2 (Particle) — perspective camera + Model 2 parent transform
-			if (numInstance < 1) numInstance = 1;
-			if (numInstance > kNumInstanceMax) numInstance = kNumInstanceMax;
+				if (numInstance < 1) numInstance = 1;
+				if (numInstance > kNumInstanceMax) numInstance = kNumInstanceMax;
 		
-		for (uint32_t index = 0; index < numInstance; ++index) {
-			WorldTransform t = transforms[index];
-			t.translate.x += index * offset.x;
-			t.translate.y += index * offset.y;
-			t.translate.z += index * offset.z;
+			//for (uint32_t index = 0; index < numInstance; ++index) {
+			//	WorldTransform t = transforms[index];
+			//	t.translate.x += index * offset.x;
+			//	t.translate.y += index * offset.y;
+			//	t.translate.z += index * offset.z;
 
-		for (uint32_t index = 0; index < kNumInstanceMax; ++index) {
-			
-			if (particles[index].lifeTime <= particles[index].currentTime) { continue; }
+			for (uint32_t index = 0; index < kNumInstanceMax; ++index) {
+
+				if (particles[index].lifeTime <= particles[index].currentTime) { continue; }
 				//particles[index].transform.translate.x += particles[index].velocity.x * kDeltaTime;
 				//particles[index].transform.translate.y += particles[index].velocity.y * kDeltaTime;
 				//particles[index].transform.translate.z += particles[index].velocity.z * kDeltaTime;
@@ -2377,8 +2409,8 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 				Matrix4x4 local;
 				if (useBillboard) {	///rotate to face camera (billboard)
 					local = Multiply(
-						Multiply(MakeScaleMatrix(particles[index].transform.scale), 
-							backToFrontMatrix), 
+						Multiply(MakeScaleMatrix(particles[index].transform.scale),
+							backToFrontMatrix),
 						MakeTranslateMatrix(particles[index].transform.translate));
 				}
 				else {				//// regular transform (no billboard)
@@ -2388,16 +2420,22 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 						particles[index].transform.translate);
 				}
 
-			Matrix4x4 parent = MakeAffineMatrix(
-				transformModel[1].scale,
-				transformModel[1].rotate,
-				transformModel[1].translate);
+				Matrix4x4 parent = MakeAffineMatrix(
+					transformModel[1].scale,
+					transformModel[1].rotate,
+					transformModel[1].translate);
 
-			Matrix4x4 world = Multiply(local, parent);
-			instancingData[index].World = world;
-			instancingData[index].WVP = Multiply(world, Multiply(viewMatrix, projectionMatrix));
-		}
-
+				Matrix4x4 world = Multiply(local, parent);
+				instancingData[index].World = world;
+				instancingData[index].WVP = Multiply(world, Multiply(viewMatrix, projectionMatrix));
+				//instancingData[index].color = {
+				//particles[index].color.x,
+				//particles[index].color.y,
+				//particles[index].color.z,
+				//alpha
+				//};
+				//++numInstance;
+			}
 		//instancingData[numInstance].WVP = worldViewProjectionMatrix; 
 		//
 		//if (numInstance < kNumInstanceMax) {
@@ -2827,7 +2865,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 //#endif
 
 	CoUninitialize();
-	CloseWindow(hwnd);
+	CloseWindow(winApp->GetHwnd());
 
 	return 0;
 }
