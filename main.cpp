@@ -19,6 +19,9 @@
 #include <cmath>
 #include <xaudio2.h>
 #include "DebugCamera.h"
+#include <random>
+#include <numbers>
+#include "WinApp.h"
 //#define DIRECTINPUT_VERSION	0x800
 //#include <dinput.h>
 #include <wrl.h>
@@ -107,6 +110,27 @@ struct Material {
 	Matrix4x4 uvTransform;
 };
 
+struct Particle {
+	WorldTransform transform;
+	Vector3 velocity;
+	Vector4 color;
+	float lifeTime;
+	float currentTime;
+};
+
+struct Emitter {
+	WorldTransform transform;
+	uint32_t count;
+	float frequency;
+	float frequencyTime;
+};
+
+struct ParticleForGPU {
+	Matrix4x4 WVP;
+	Matrix4x4 World;
+	Vector4 color;
+};
+
 struct ChunkHeader {
 	char id[4];
 	int32_t size;
@@ -140,6 +164,7 @@ struct SphereMesh {
 float pi = 3.14f;
 
 bool useDebugCamera = false;
+bool useBillboard = false;
 
 enum BlendMode {
 	kBlendModeNone,
@@ -201,6 +226,13 @@ D3D12_BLEND_DESC CreateBlendDesc(int mode) {
 	return desc;
 }
 
+//std::list<Particle> Emit(const Emitter& emitter, std::mt19937& randomEngine) {
+//	std::list<Particle> particles;
+//	for (uint32_t count = 0; count < emitter.count; ++count) {
+//		particles.push_back(MakeNewParticle(randomEngine));
+//	}
+//	return particles;
+//}
 
 ModelData LoadObjFile(const std::string& directoryPath, const std::string& filename) {
 
@@ -760,6 +792,7 @@ Matrix4x4 Inverse(Matrix4x4 m) {
 	return inverse;
 }
 
+
 Vector4 Transform(const Vector4& v, const Matrix4x4& m) {
 	Vector4 result;
 	result.x = v.x * m.m[0][0] + v.y * m.m[1][0] + v.z * m.m[2][0] + 1.0f * m.m[3][0];
@@ -783,8 +816,8 @@ WorldTransform transform = {
 
 WorldTransform cameraTransform = {
 	{ 1.0f, 1.0f, 1.0f }, // scale
-	{ 0.0f, 0.0f, 0.0f }, // rotate
-	{ 0.0f, 0.0f, -5.0f } // translate (move camera back along z-axis)
+	{ std::numbers::pi_v<float> / 3.0f, std::numbers::pi_v<float>, 0.0f }, // rotate
+	{ 0.0f, 10.0f, 10.0f } // translate (move camera back along z-axis)
 };
 
 WorldTransform uvTransformSprite = { 
@@ -1483,6 +1516,11 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	Microsoft::WRL::ComPtr<ID3D12Resource> textureResource5 = CreateTextureResource(device, metadata5);
 	Microsoft::WRL::ComPtr<ID3D12Resource> intermediateResource5 = UploadTextureData(textureResource5.Get(), mipImages5, device.Get(), commandList.Get());
 
+	DirectX::ScratchImage mipImages6 = LoadTexture("Resources/particle.png");
+	const DirectX::TexMetadata& metadata6 = mipImages6.GetMetadata();
+	Microsoft::WRL::ComPtr<ID3D12Resource> textureResource6 = CreateTextureResource(device, metadata6);
+	Microsoft::WRL::ComPtr<ID3D12Resource> intermediateResource6 = UploadTextureData(textureResource6.Get(), mipImages6, device.Get(), commandList.Get());
+
 	//--------------Load Texture end --------------
 
 	//Depth Stencil Buffer
@@ -1769,7 +1807,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	//Rasterizer State
 	D3D12_RASTERIZER_DESC rasterizerDesc{};
 	rasterizerDesc.FillMode = D3D12_FILL_MODE_SOLID;
-	rasterizerDesc.CullMode = D3D12_CULL_MODE_BACK;
+	rasterizerDesc.CullMode = D3D12_CULL_MODE_NONE;		//D3D12_CULL_MODE_BACK;
 	rasterizerDesc.FrontCounterClockwise = FALSE;
 	rasterizerDesc.DepthBias = D3D12_DEFAULT_DEPTH_BIAS;
 	rasterizerDesc.DepthBiasClamp = D3D12_DEFAULT_DEPTH_BIAS_CLAMP;
@@ -2024,6 +2062,12 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	srvDesc5.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
 	srvDesc5.Texture2D.MipLevels = UINT(metadata5.mipLevels);
 
+	D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc6{};
+	srvDesc6.Format = metadata6.format;
+	srvDesc6.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+	srvDesc6.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+	srvDesc6.Texture2D.MipLevels = UINT(metadata6.mipLevels);
+
 	//instancing SRV
 	D3D12_SHADER_RESOURCE_VIEW_DESC instancingSrvDesc{};
 	instancingSrvDesc.Format = DXGI_FORMAT_UNKNOWN;
@@ -2067,10 +2111,16 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	D3D12_GPU_DESCRIPTOR_HANDLE textureSrvHandleGPU5 = GetGPUDescriptorHandle(srvDescriptorHeap.Get(), descriptorSizeSRV, 6);
 	device->CreateShaderResourceView(textureResource5.Get(), &srvDesc5, textureSrvHandleCPU5);
 
+	D3D12_CPU_DESCRIPTOR_HANDLE textureSrvHandleCPU6 = GetCPUDescriptorHandle(srvDescriptorHeap.Get(), descriptorSizeSRV, 7);
+	D3D12_GPU_DESCRIPTOR_HANDLE textureSrvHandleGPU6 = GetGPUDescriptorHandle(srvDescriptorHeap.Get(), descriptorSizeSRV, 7);
+	device->CreateShaderResourceView(textureResource6.Get(), &srvDesc6, textureSrvHandleCPU6);
+
 	// Instance structured buffer SRV for Particle VS (use free descriptor index 7; avoid texture slots)
-	D3D12_CPU_DESCRIPTOR_HANDLE instancingSrvHandleCPU = GetCPUDescriptorHandle(srvDescriptorHeap.Get(), descriptorSizeSRV, 7);
-	D3D12_GPU_DESCRIPTOR_HANDLE instancingSrvHandleGPU = GetGPUDescriptorHandle(srvDescriptorHeap.Get(), descriptorSizeSRV, 7);
+	D3D12_CPU_DESCRIPTOR_HANDLE instancingSrvHandleCPU = GetCPUDescriptorHandle(srvDescriptorHeap.Get(), descriptorSizeSRV, 8);
+	D3D12_GPU_DESCRIPTOR_HANDLE instancingSrvHandleGPU = GetGPUDescriptorHandle(srvDescriptorHeap.Get(), descriptorSizeSRV, 8);
 	device->CreateShaderResourceView(instanceWVPResource.Get(), &instancingSrvDesc, instancingSrvHandleCPU);
+
+
 
 	//
 	int currentBlendMode = kBlendModeNone;
@@ -2096,15 +2146,16 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	};
 
 	const char* modelNames[] = { "plane.obj", "multiMesh.obj", "axis.obj", "multiMaterial.obj" , "Sphere.obj", "utah_teapot.obj", "bunny.obj", "suzanne.obj", "fence.obj"};
-	const char* textureNames[] = { "uvChecker", "monsterball", "sample", "checkerboard", "grid", "fence"};
+	const char* textureNames[] = { "uvChecker", "monsterball", "sample", "checkerboard", "grid", "fence", "particle" };
 
-	D3D12_GPU_DESCRIPTOR_HANDLE textureHandles[6] = {
+	D3D12_GPU_DESCRIPTOR_HANDLE textureHandles[7] = {
 		textureSrvHandleGPU0,
 		textureSrvHandleGPU1,
 		textureSrvHandleGPU2,
 		textureSrvHandleGPU3,
 		textureSrvHandleGPU4,
 		textureSrvHandleGPU5,
+		textureSrvHandleGPU6,
 	};
 
 	const int kModelCount = 9;
@@ -2220,111 +2271,86 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			ImGui_ImplWin32_NewFrame();
 			ImGui::NewFrame();
 #endif
-
-			//-----// ====== Sound and Camera Input ======== //
-			//-----static BYTE prevKeys[256] = {};
-			//-----keyboard->Acquire();
-			//-----keyboard->GetDeviceState(sizeof(gKeys), gKeys);
-			//-----
-			//-----// Toggle between Debug and Regular camera (Press SPACE)
-			//-----bool spaceKeyPressed = (gKeys[DIK_SPACE] & 0x80) && !(prevKeys[DIK_SPACE] & 0x80);
-			//-----memcpy(prevKeys, gKeys, sizeof(prevKeys));
-			//-----
-			//-----if (spaceKeyPressed) {  // Key just pressed
-			//-----	//useDebugCamera = !useDebugCamera;
-			//-----	isSoundPlaying = !isSoundPlaying;
-			//-----	SoundPlayWave(xAudio2.Get(), soundData1, isSoundPlaying);
-			//-----}
-			//-----
-			//-----mouse->Acquire();
-			//-----HRESULT hr = mouse->GetDeviceState(sizeof(DIMOUSESTATE), &gMouseState);
-
-
-			//-----float mouseDeltaX = 0;
-			//-----float mouseDeltaY = 0;
-			//-----float mouseDeltaZ = (float)gMouseState.lZ; //wheel
-			//-----
-			//-----bool isLeftClick = false;
-			//-----bool isRightClick = false;
-			//-----
-			//-----if (SUCCEEDED(hr)) {
-			//-----	mouseDeltaX = (float)gMouseState.lX;
-			//-----	mouseDeltaY = (float)gMouseState.lY;
-			//-----	isLeftClick = (gMouseState.rgbButtons[0] & 0x80) != 0;
-			//-----	isRightClick = (gMouseState.rgbButtons[1] & 0x80) != 0;
-			//-----}
-			//-----
-			//-----if (useDebugCamera) {
-			//-----	if (isLeftClick) {
-			//-----		debugCamera.SetMouseDelta(mouseDeltaX, mouseDeltaY);      // Yaw + Pitch
-			//-----	}
-			//-----	if (isRightClick) {
-			//-----		debugCamera.SetMouseRollDelta(mouseDeltaX);          // Roll with horizontal drag
-			//-----	}
-			//-----	if (mouseDeltaZ != 0) {
-			//-----		debugCamera.SetMouseWheelDelta(mouseDeltaZ);      // Optional: forward movement
-			//-----	}
-			//-----	debugCamera.Update();
-			//-----}
-			
-
-			// === Update ===
-			//transform.rotate.y += 0.03f;  
-
-			Matrix4x4 worldMatrix = MakeAffineMatrix(transform.scale, transform.rotate, transform.translate);
-			Matrix4x4 viewMatrixSprite;
-			MakeIdentity4x4(viewMatrixSprite);
-
-			////WVP Matrix を作って書き込む
-			Matrix4x4 worldMatrixSprite = MakeAffineMatrix(transformSprite.scale, transformSprite.rotate, transformSprite.translate);
-			Matrix4x4 projectionMatrixSprite = MakeOrthographicMatrix(0.0f, 0.0f, float(kClientWidth), float(kClientHeight), 0.0f, 100.0f);
-			Matrix4x4 worldViewProjectionMatrixSprite = Multiply(worldMatrixSprite, Multiply(viewMatrixSprite, projectionMatrixSprite));
-			*transformationMatrixDataSprite = worldViewProjectionMatrixSprite;
-
-			//camera
-			Matrix4x4 viewMatrix;
-			if (useDebugCamera) {
-				DebugCamera::Matrix4x4 debugView = debugCamera.GetViewMatrix();
-				for (int i = 0; i < 4; ++i)
-					for (int j = 0; j < 4; ++j)
-						viewMatrix.m[i][j] = debugView.m[i][j];
-			}
-			else {
-				Matrix4x4 cameraMatrix = MakeAffineMatrix(cameraTransform.scale, cameraTransform.rotate, cameraTransform.translate);
-				viewMatrix = Inverse(cameraMatrix);
-			}
-
-			Matrix4x4 projectionMatrix = MakePerspectiveFovMatrix(0.45f,
-				float(kClientWidth) / float(kClientHeight), 0.1f, 100.0f);
-
-			// ========== NEW: update both models ==========
-			for (int i = 0; i < 2; ++i) {
-				Matrix4x4 world = MakeAffineMatrix(
-					transformModel[i].scale,
-					transformModel[i].rotate,
-					transformModel[i].translate);
-
-				modelTransformData[i]->WVP = Multiply(world, Multiply(viewMatrix, projectionMatrix));
-				modelTransformData[i]->World = world;
-			}
-			
-			//UV Transform
+		input->Update();
+		if (input->TriggerKey(DIK_0)) {
+			OutputDebugStringA("Hit 0\n");
+		}
 		
-			materialSpriteData->uvTransform = MakeUVTransformMatrix(uvTransformSprite);
 
-			//if (Input::GetInstance()->TriggerKey(DIK_SPACE))
-			//SoundPlayWave(xAudio2.Get(), soundData1);
+		//camera
+		Matrix4x4 viewMatrix;
+		Matrix4x4 cameraMatrix;
 
-			
-			//BYTE key[256] = {};
-			//if (key[DIK_0]) {
-			//	OutputDebugStringA("Hit 0\n");
-			//}
+		if (useDebugCamera) {
+			DebugCamera::Matrix4x4 debugView = debugCamera.GetViewMatrix();
+			for (int i = 0; i < 4; ++i)
+				for (int j = 0; j < 4; ++j)
+					viewMatrix.m[i][j] = debugView.m[i][j];
+		}
+		else {
+			cameraMatrix = MakeAffineMatrix(cameraTransform.scale, cameraTransform.rotate, cameraTransform.translate);
+			viewMatrix = Inverse(cameraMatrix);
+		}
 
-			//key input (Trigger) process
-			//bool is the key being pressed? (uint8_t [key #]
-			//bool the moment a key is pressed (uint8_t [key #]
-			//prevents negative values and limitted to [0 - 255]
+		Matrix4x4 projectionMatrix = MakePerspectiveFovMatrix(0.45f,
+			float(kClientWidth) / float(kClientHeight), 0.1f, 100.0f);
+
+		Matrix4x4 backToFrontMatrix = MakeRotatedXYZMatrix(
+				MakeRotateXMatrix(cameraTransform.rotate.x), 
+				MakeRotateYMatrix(cameraTransform.rotate.y), 
+				MakeRotateZMatrix(cameraTransform.rotate.z));
+
+		//Matrix4x4 billboardMatrix = Multiply(backToFrontMatrix, cameraMatrix);
+		//billboardMatrix.m[3][0] = 0.0f;
+		//billboardMatrix.m[3][1] = 0.0f;
+		//billboardMatrix.m[3][2] = 0.0f; 
+
+		// === Update ===
+		//transform.rotate.y += 0.03f;  
+
+		Matrix4x4 viewMatrixSprite;
+		MakeIdentity4x4(viewMatrixSprite);
+
+		////WVP Matrix を作って書き込む
+		Matrix4x4 worldMatrixSprite = MakeAffineMatrix(transform.scale, transform.rotate, transform.translate);
+		Matrix4x4 projectionMatrixSprite = MakeOrthographicMatrix(0.0f, 0.0f, float(kClientWidth), float(kClientHeight), 0.0f, 100.0f);
+		Matrix4x4 worldViewProjectionMatrixSprite = Multiply(worldMatrixSprite, Multiply(viewMatrixSprite, projectionMatrixSprite));
+		*transformationMatrixDataSprite = worldViewProjectionMatrixSprite;
+
+		
+
+		// ========== NEW: update both models ==========
+		for (int i = 0; i < 2; ++i) {
+			Matrix4x4 world = MakeAffineMatrix(
+				transformModel[i].scale,
+				transformModel[i].rotate,
+				transformModel[i].translate);
+
+			modelTransformData[i]->WVP = Multiply(world, Multiply(viewMatrix, projectionMatrix));
+			modelTransformData[i]->World = world;
+		}
+		
+		//UV Transform
+		
+		materialSpriteData->uvTransform = MakeUVTransformMatrix(uvTransformSprite);
+
+		///////
+		
+
+		//for (std::list<Particle>::iterator particleIterator = particles.begin();
+		//	particleIterator != particles.end(); ) {
+		//
+		//	if ((*particleIterator).lifeTime <= (*particleIterator).currentTime) {
+		//		continue;	//skip dead particle
+		//	}
+		//
+		//	///various processes go here
+		//
+		//
+		//	++particleIterator;
+		//}
+
+		////////
 
 		// Instancing matrices for Model 2 (Particle) — perspective camera + Model 2 parent transform
 			if (numInstance < 1) numInstance = 1;
@@ -2336,7 +2362,31 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			t.translate.y += index * offset.y;
 			t.translate.z += index * offset.z;
 
-			Matrix4x4 local = MakeAffineMatrix(t.scale, t.rotate, t.translate);
+		for (uint32_t index = 0; index < kNumInstanceMax; ++index) {
+			
+			if (particles[index].lifeTime <= particles[index].currentTime) { continue; }
+				//particles[index].transform.translate.x += particles[index].velocity.x * kDeltaTime;
+				//particles[index].transform.translate.y += particles[index].velocity.y * kDeltaTime;
+				//particles[index].transform.translate.z += particles[index].velocity.z * kDeltaTime;
+
+				//particles[index].currentTime += kDeltaTime;
+
+				float alpha = 1.0f - (particles[index].currentTime / particles[index].lifeTime);
+				if (alpha < 0.0f) alpha = 0;
+
+				Matrix4x4 local;
+				if (useBillboard) {	///rotate to face camera (billboard)
+					local = Multiply(
+						Multiply(MakeScaleMatrix(particles[index].transform.scale), 
+							backToFrontMatrix), 
+						MakeTranslateMatrix(particles[index].transform.translate));
+				}
+				else {				//// regular transform (no billboard)
+					local = MakeAffineMatrix(
+						particles[index].transform.scale,
+						particles[index].transform.rotate,
+						particles[index].transform.translate);
+				}
 
 			Matrix4x4 parent = MakeAffineMatrix(
 				transformModel[1].scale,
@@ -2347,6 +2397,15 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			instancingData[index].World = world;
 			instancingData[index].WVP = Multiply(world, Multiply(viewMatrix, projectionMatrix));
 		}
+
+		//instancingData[numInstance].WVP = worldViewProjectionMatrix; 
+		//
+		//if (numInstance < kNumInstanceMax) {
+		//	instancingData[numInstance].WVP = worldViewProjectionMatrix;
+		//	++numInstance;
+		//}
+		//++particleIterator;
+
 
 #ifdef USE_IMGUI
 			//ImGui::ShowDemoWindow();
@@ -2407,16 +2466,44 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 				if (ImGui::Button("Reset Instancing")) {
 					numInstance = 10;
 					offset = { 0.0f, 0.0f, 0.0f };
+
 				}
+				ImGui::Separator();
+				ImGui::Checkbox("Update", &isUpdate);
+				if (isUpdate) {
+					for (uint32_t index = 0; index < kNumInstanceMax; ++index) {
+						particles[index].transform.translate.x += particles[index].velocity.x * kDeltaTime;
+						particles[index].transform.translate.y += particles[index].velocity.y * kDeltaTime;
+						particles[index].transform.translate.z += particles[index].velocity.z * kDeltaTime;
+						particles[index].currentTime += kDeltaTime;
+					}
+
+				}
+				//if (ImGui::Button("Add Button")) {	///add particles and erase particles that have exceeded their lifespan
+				//	particles.push_back(MakeNewParticle(randomEngine));
+				//	particles.push_back(MakeNewParticle(randomEngine));
+				//}
 				ImGui::Separator();
 				ImGui::DragFloat3("Scale", &transformModel[1].scale.x, 0.01f, 0.1f, 10.0f);
 				ImGui::DragFloat3("Rotation", &transformModel[1].rotate.x, 0.03f, -10.0f, 10.0f);
 				ImGui::DragFloat3("Position", &transformModel[1].translate.x, 0.01f, -10.0f, 10.0f);
 				if (ImGui::Button("Reset Transform")) {
-					transformModel[1] = { {1,1,1}, {0,0,0}, {-2,0,5} };
+					for (uint32_t index = 0; index < kNumInstanceMax; ++index) {
+						particles[index].transform.translate = { index * spacing, index * spacing, index * spacing };
+						particles[index].transform = { {1.0f,1.0f,1.0f}, {0.0f,0.0f,0.0f}, {-2.0f,0.0f,5.0f} };
+						particles[index].transform.translate = { distribution(randomEngine), distribution(randomEngine), distribution(randomEngine) };
+						particles[index].velocity = { distribution(randomEngine), distribution(randomEngine), distribution(randomEngine) };
+						//particles[index].color = { 1.0f, 1.0f, 1.0f, 1.0f };
+						//
+						//particles[index] = MakeNewParticle(randomEngine);
+						//numInstance = 0;
+						particles[index].currentTime = 0.0f; 
+					}
 				}
 				ImGui::PopID();
 			}
+			ImGui::Separator();
+			ImGui::Checkbox("Use Billboard", &useBillboard);
 			ImGui::Separator();
 			ImGui::Checkbox("enableLighting", &isLight);
 			if (isLight) {
@@ -2457,6 +2544,12 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			//ImGui::Separator();
 			//ImGui::Text("DEBUG CAMERA CONTROLS (MOUSE/KEYBOARD)");
 			//ImGui::Text("SPACE = Toggle Sound\nW = forward\nS = backward\nA = left\nD = right\nQ = down\nE = up\nMouse Scroll = forward/backward\nLeft Click = drag camera\nRight Click = rotate (Z-axis)");
+
+			ImGui::End();
+
+			ImGui::Begin("Camera Settings");
+			ImGui::DragFloat3("Camera Rotate", &cameraTransform.rotate.x, 0.03f, -10.0f, 10.0f);
+			ImGui::DragFloat3("Camera Position", &cameraTransform.translate.x, 0.01f, -10.0f, 10.0f);
 
 			ImGui::End();
 
