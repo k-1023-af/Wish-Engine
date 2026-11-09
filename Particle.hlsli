@@ -12,10 +12,11 @@ struct PixelShaderOutput
     float4 color : SV_TARGET;
 };
 
-struct TransformationMatrix
+struct ParticleForGPU
 {
     float4x4 WVP;
     float4x4 World;
+    float4 color;
 };
 
 struct DirectionalLight

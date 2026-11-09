@@ -1766,7 +1766,6 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		//particles[index].transform.rotate = { 0.0f, 0.0f, 0.0f };
 		//particles[index].transform.translate = { index * spacing, index * spacing, index * spacing };
 		
-
 		particles[index] = MakeNewParticle(randomEngine);
 
 		std::uniform_real_distribution<float> distTime(1.0f, 3.0f);
@@ -1781,8 +1780,8 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	}
 
 	Microsoft::WRL::ComPtr<ID3D12Resource> instanceWVPResource =
-		CreateBufferResource(device, sizeof(TransformationMatrix) * kNumInstanceMax);
-	TransformationMatrix* instancingData = nullptr;
+		CreateBufferResource(device, sizeof(ParticleForGPU) * kNumInstanceMax);
+	ParticleForGPU* instancingData = nullptr;
 	instanceWVPResource->Map(0, nullptr, reinterpret_cast<void**>(&instancingData));
 
 	for (uint32_t index = 0; index < numInstance; ++index) {
@@ -2108,7 +2107,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	instancingSrvDesc.Buffer.FirstElement = 0;
 	instancingSrvDesc.Buffer.Flags = D3D12_BUFFER_SRV_FLAG_NONE;
 	instancingSrvDesc.Buffer.NumElements = kNumInstanceMax;
-	instancingSrvDesc.Buffer.StructureByteStride = sizeof(TransformationMatrix);
+	instancingSrvDesc.Buffer.StructureByteStride = sizeof(ParticleForGPU);
 	
 
 	//Process screen Back Buffer to Front Buffer (Screen Swap)
@@ -2155,7 +2154,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 
 	//
-	int currentBlendMode = kBlendModeNone;
+	int currentBlendMode = kBlendModeNormal;
 	float clearColor[] = { 0.1f, 0.25f, 0.5f, 1.0f };
 
 	bool isLight = false;
@@ -2428,13 +2427,13 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 				Matrix4x4 world = Multiply(local, parent);
 				instancingData[index].World = world;
 				instancingData[index].WVP = Multiply(world, Multiply(viewMatrix, projectionMatrix));
-				//instancingData[index].color = {
-				//particles[index].color.x,
-				//particles[index].color.y,
-				//particles[index].color.z,
-				//alpha
-				//};
-				//++numInstance;
+				instancingData[index].color = {
+					particles[index].color.x,
+					particles[index].color.y,
+					particles[index].color.z,
+					alpha
+				};
+				++numInstance;
 			}
 		//instancingData[numInstance].WVP = worldViewProjectionMatrix; 
 		//
@@ -2534,7 +2533,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 						//particles[index].color = { 1.0f, 1.0f, 1.0f, 1.0f };
 						//
 						//particles[index] = MakeNewParticle(randomEngine);
-						//numInstance = 0;
+						numInstance = 0;
 						particles[index].currentTime = 0.0f; 
 					}
 				}
