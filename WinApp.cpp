@@ -6,6 +6,8 @@
 //
 //extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
 
+#pragma comment(lib, "winmm.lib")
+
 LRESULT CALLBACK WinApp::WindowProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 	if (ImGui_ImplWin32_WndProcHandler(hwnd, msg, wparam, lparam)) {
 		return true;
@@ -48,6 +50,8 @@ void WinApp::Initialize() {
 		nullptr);
 
 	ShowWindow(hwnd, SW_SHOW);
+
+	timeBeginPeriod(1);
 }
 
 void WinApp::Update() {
