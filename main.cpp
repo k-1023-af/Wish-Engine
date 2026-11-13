@@ -70,6 +70,11 @@ struct Matrix4x4 {
 	float m[4][4];
 };
 
+struct LineVertex {
+	Vector3 position;
+	Vector4 color;
+};
+
 struct WorldTransform {
 	Vector3 scale;
 	Vector3 rotate;
@@ -158,9 +163,14 @@ struct SphereMesh {
 };
 
 float pi = 3.14f;
+float particleLifeTime = 2.0f;
 
 bool useDebugCamera = false;
-bool useBillboard = false;
+bool useBillboard = true;
+bool useInstancing = true;
+bool useEmitter = false;
+bool randomColor = false;
+bool fadeOut = false;
 
 D3D12_BLEND_DESC CreateBlendDesc(int mode) {
 	D3D12_BLEND_DESC desc{};
@@ -211,14 +221,6 @@ D3D12_BLEND_DESC CreateBlendDesc(int mode) {
 
 	return desc;
 }
-
-//std::list<Particle> Emit(const Emitter& emitter, std::mt19937& randomEngine) {
-//	std::list<Particle> particles;
-//	for (uint32_t count = 0; count < emitter.count; ++count) {
-//		particles.push_back(MakeNewParticle(randomEngine));
-//	}
-//	return particles;
-//}
 
 ModelData LoadObjFile(const std::string& directoryPath, const std::string& filename) {
 
@@ -778,6 +780,23 @@ Matrix4x4 Inverse(Matrix4x4 m) {
 	return inverse;
 }
 
+Matrix4x4 MakeBillboardWorld(const Vector3& scale, const Vector3& rotate, const Vector3& translate, const Matrix4x4& billboard, bool useBillboard) {
+	Matrix4x4 scaleMat = MakeScaleMatrix(scale);
+	
+	// local spin (spin in place)
+	Matrix4x4 rotX = MakeRotateXMatrix(rotate.x);
+	Matrix4x4 rotY = MakeRotateYMatrix(rotate.y);
+	Matrix4x4 rotZ = MakeRotateZMatrix(rotate.z);
+	Matrix4x4 localRot = Multiply(rotX, Multiply(rotY, rotZ));
+
+	Matrix4x4 translateMat = MakeTranslateMatrix(translate);
+	
+	if (useBillboard) {
+		// Scale -> LocalRotation -> Billboard -> Translate
+		return Multiply(Multiply(Multiply(scaleMat, localRot), billboard), translateMat);
+	}
+	return MakeAffineMatrix(scale, rotate, translate);
+}
 
 Vector4 Transform(const Vector4& v, const Matrix4x4& m) {
 	Vector4 result;
@@ -794,15 +813,41 @@ Vector4 Transform(const Vector4& v, const Matrix4x4& m) {
 	return result;
 }
 
-Particle MakeNewParticle(std::mt19937& randomEngine) {
+Particle MakeNewParticle(std::mt19937& randomEngine, const Vector3& translate, const Vector4& baseColor) {
 	std::uniform_real_distribution<float> distribution(-1.0f, 1.0f);
+	Vector3 randomTranslate{ distribution(randomEngine), distribution(randomEngine), distribution(randomEngine) };
+
 	Particle particle;
 	particle.transform.scale = { 1.0f, 1.0f, 1.0f };
 	particle.transform.rotate = { 0.0f, 0.0f, 0.0f };
-	particle.transform.translate = { distribution(randomEngine), distribution(randomEngine), distribution(randomEngine) };
+	particle.transform.translate = { 
+		randomTranslate.x + distribution(randomEngine), 
+		randomTranslate.y + distribution(randomEngine), 
+		randomTranslate.z + distribution(randomEngine) 
+	};
+	
 	particle.velocity = { distribution(randomEngine), distribution(randomEngine), distribution(randomEngine) };
-	particle.color = { distribution(randomEngine), distribution(randomEngine), distribution(randomEngine), 1.0f };
+	
+	if (randomColor){
+		std::uniform_real_distribution<float> colorDist(0.0f, 1.0f);
+		particle.color = { distribution(randomEngine), distribution(randomEngine), distribution(randomEngine), 1.0f };
+	}
+	else {
+		particle.color = baseColor;
+	}
+
+	particle.lifeTime = particleLifeTime;
+	particle.currentTime = 0.0f;
+
 	return particle;
+}
+
+std::list<Particle> Emit(const Emitter& emitter, std::mt19937& randomEngine, const Vector4& baseColor) {
+	std::list<Particle> particles;
+	for (uint32_t i = 0; i < emitter.count; ++i) {
+		particles.push_back(MakeNewParticle(randomEngine, emitter.transform.translate, baseColor));
+	}
+	return particles;
 }
 
 WorldTransform transform = {
@@ -1048,6 +1093,36 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	///------SOUND DATA END----------
 
 
+	////////////////////////////////std::vector<LineVertex> lines;
+	////////////////////////////////
+	////////////////////////////////const float size = 10.0f;
+	////////////////////////////////const float step = 1.0f;
+	////////////////////////////////const float y = 0.0f;
+	////////////////////////////////
+	////////////////////////////////Vector4 gray = { 0.4f, 0.4f, 0.4f, 1.0f };
+	////////////////////////////////Vector4 red = { 1.0f, 0.0f, 0.0f, 1.0f }; // X
+	////////////////////////////////Vector4 blue = { 0.0f, 0.0f, 1.0f, 1.0f }; // Z
+	////////////////////////////////Vector4 green = { 0.0f, 1.0f, 0.0f, 1.0f }; // Y (optional)
+	////////////////////////////////
+	////////////////////////////////// Grid lines parallel to X (varying Z)
+	////////////////////////////////for (float z = -size; z <= size; z += step) {
+	////////////////////////////////	Vector4 c = (fabsf(z) < 0.001f) ? red : gray;
+	////////////////////////////////	lines.push_back({ {-size, y, z}, c });
+	////////////////////////////////	lines.push_back({ { size, y, z}, c });
+	////////////////////////////////}
+	////////////////////////////////
+	////////////////////////////////// Grid lines parallel to Z (varying X)
+	////////////////////////////////for (float x = -size; x <= size; x += step) {
+	////////////////////////////////	Vector4 c = (fabsf(x) < 0.001f) ? blue : gray;
+	////////////////////////////////	lines.push_back({ {x, y, -size}, c });
+	////////////////////////////////	lines.push_back({ {x, y,  size}, c });
+	////////////////////////////////}
+	////////////////////////////////
+	////////////////////////////////// Optional Y axis
+	////////////////////////////////lines.push_back({ {0, -size, 0}, green });
+	////////////////////////////////lines.push_back({ {0,  size, 0}, green });
+
+
 	//Debug Layer
 //ifdef _DEBUG
 //	Microsoft::WRL::ComPtr<ID3D12Debug1> debugController = nullptr;
@@ -1203,7 +1278,79 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	assert(SUCCEEDED(hr));
 	 
 	//----------------------------------------------------------
-	
+	// Line Vertex buffer
+
+	//////////////////////// 1. Define 1 Root Parameter: a CBV at register b0 (Vertex Shader visibility)
+	//////////////////////D3D12_ROOT_PARAMETER lineRootParameters[1]{};
+	//////////////////////lineRootParameters[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
+	//////////////////////lineRootParameters[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_VERTEX;
+	//////////////////////lineRootParameters[0].Descriptor.ShaderRegister = 0; // b0
+	//////////////////////lineRootParameters[0].Descriptor.RegisterSpace = 0;
+	//////////////////////
+	//////////////////////// 2. Describe the Root Signature (MUST allow Input Assembler for vertex buffers)
+	//////////////////////D3D12_ROOT_SIGNATURE_DESC lineRootSigDesc{};
+	//////////////////////lineRootSigDesc.NumParameters = _countof(lineRootParameters);
+	//////////////////////lineRootSigDesc.pParameters = lineRootParameters;
+	//////////////////////lineRootSigDesc.NumStaticSamplers = 0;
+	//////////////////////lineRootSigDesc.pStaticSamplers = nullptr;
+	//////////////////////lineRootSigDesc.Flags = D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
+	//////////////////////
+	//////////////////////// 3. Serialize and Create
+	//////////////////////ComPtr<ID3DBlob> signatureBlob;
+	//////////////////////ComPtr<ID3DBlob> errorBlob;
+	//////////////////////HRESULT hr = D3D12SerializeRootSignature(
+	//////////////////////	&lineRootSigDesc,
+	//////////////////////	D3D_ROOT_SIGNATURE_VERSION_1,
+	//////////////////////	&signatureBlob,
+	//////////////////////	&errorBlob
+	//////////////////////);
+	//////////////////////if (FAILED(hr)) {
+	//////////////////////	if (errorBlob) {
+	//////////////////////		OutputDebugStringA(static_cast<char*>(errorBlob->GetBufferPointer()));
+	//////////////////////	}
+	//////////////////////	assert(false);
+	//////////////////////}
+	//////////////////////
+	//////////////////////hr = device->CreateRootSignature(
+	//////////////////////	0,
+	//////////////////////	signatureBlob->GetBufferPointer(),
+	//////////////////////	signatureBlob->GetBufferSize(),
+	//////////////////////	IID_PPV_ARGS(&lineRootSignature)
+	//////////////////////);
+	//////////////////////assert(SUCCEEDED(hr));
+	//////////////////////
+	//////////////////////
+	//////////////////////// Input Layout matching LineVertex { Vector3 pos; Vector4 color; }
+	//////////////////////D3D12_INPUT_ELEMENT_DESC inputElements[] = {
+	//////////////////////	{ "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT,    0, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
+	//////////////////////	{ "COLOR",    0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, D3D12_APPEND_ALIGNED_ELEMENT, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
+	//////////////////////};
+	//////////////////////
+	//////////////////////D3D12_GRAPHICS_PIPELINE_STATE_DESC psoDesc{};
+	//////////////////////psoDesc.pRootSignature = lineRootSignature.Get();
+	//////////////////////psoDesc.InputLayout = { inputElements, _countof(inputElements) };
+	//////////////////////psoDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_LINE;
+	//////////////////////
+	//////////////////////
+	//////////////////////
+	//////////////////////const UINT byteSize = UINT(lines.size() * sizeof(LineVertex));
+	//////////////////////
+	//////////////////////ComPtr<ID3D12Resource> lineVB = dxCommon->CreateBufferResource(byteSize);
+	//////////////////////
+	//////////////////////LineVertex* mapped = nullptr;
+	//////////////////////lineVB->Map(0, nullptr, reinterpret_cast<void**>(&mapped));
+	//////////////////////memcpy(mapped, lines.data(), byteSize);
+	//////////////////////lineVB->Unmap(0, nullptr);
+	//////////////////////
+	//////////////////////D3D12_VERTEX_BUFFER_VIEW lineVBV{};
+	//////////////////////lineVBV.BufferLocation = lineVB->GetGPUVirtualAddress();
+	//////////////////////lineVBV.SizeInBytes = byteSize;
+	//////////////////////lineVBV.StrideInBytes = sizeof(LineVertex);
+	//////////////////////
+	//////////////////////UINT lineVertexCount = UINT(lines.size());
+
+
+	//---------------------------------------------------------
 
 	//Index (combine 2 triangles)
 	Microsoft::WRL::ComPtr<ID3D12Resource> indexResourceSprite = dxCommon->CreateBufferResource(sizeof(uint32_t) * 6);
@@ -1266,9 +1413,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	directionalLightData->intensity = 1.0f;
 	float halfLambertPower = 2.0f;
 
-	//Transformation Matrix for Instancing
-	const uint32_t kNumInstanceMax = 100;
-	uint32_t numInstance = 10;
+	
 
 	ModelData modelDataInstance;
 	modelDataInstance.vertices.push_back({ .position = {1.0f, 1.0f, 0.0f, 1.0f}, .texcoord = {0.0f, 0.0f}, .normal = {0.0f, 0.0f, 1.0f} });	//top left
@@ -1294,27 +1439,42 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		instanceVertexResource->Unmap(0, nullptr);
 	}
 
-	Particle particles[kNumInstanceMax];
+	std::list<Particle> particles;
+	Emitter emitter{};
+	emitter.count = 3;
+	emitter.frequency = 0.5f;
+	emitter.frequencyTime = 0.0f;
+	emitter.transform.translate = { 0.0f, 0.0f, 0.f };
+	emitter.transform.rotate = { 0.0f, 0.0f, 0.0f };
+	emitter.transform.scale = { 1.0f, 1.0f, 1.0f };
+
+	particles.splice(particles.end(), Emit(emitter, randomEngine, materialSpriteData->color));
+	///	particles.push_back(MakeNewParticle(randomEngine, emitter.transform.translate));
+	
+	const uint32_t kNumInstanceMax = 100;
+	uint32_t numInstance = 10;
+	
 	bool isUpdate = false;
 	float spacing = 0.1f;
-	Vector3 offset = { 0.0f, 0.0f, 0.0f };
-	for (uint32_t index = 0; index < kNumInstanceMax; ++index) {
-		//particles[index].transform.scale = { 1.0f, 1.0f, 1.0f };
-		//particles[index].transform.rotate = { 0.0f, 0.0f, 0.0f };
-		//particles[index].transform.translate = { index * spacing, index * spacing, index * spacing };
-		
-		particles[index] = MakeNewParticle(randomEngine);
+	Vector3 offset = { 0.2f, 0.3f, 0.0f };
+	///for (uint32_t index = 0; index < kNumInstanceMax; ++index) {
+	///	//particles[index].transform.scale = { 1.0f, 1.0f, 1.0f };
+	///	//particles[index].transform.rotate = { 0.0f, 0.0f, 0.0f };
+	///	//particles[index].transform.translate = { index * spacing, index * spacing, index * spacing };
+	///	
+	///	particles.push_back(MakeNewParticle(randomEngine, emitter.transform.translate));
+	///
+	///	std::uniform_real_distribution<float> distTime(1.0f, 3.0f);
+	///	particles[index].lifeTime = distTime(randomEngine);
+	///	particles[index].currentTime = 0;
+	///}
+	///
+	///std::uniform_real_distribution<float> distribution(-1.0f, 1.0f);
+	///for (uint32_t index = 0; index < kNumInstanceMax; ++index) {
+	///	particles[index].transform.translate = { distribution(randomEngine), distribution(randomEngine), distribution(randomEngine) };
+	///	particles[index].velocity = { distribution(randomEngine), distribution(randomEngine), distribution(randomEngine) };
+	///}
 
-		std::uniform_real_distribution<float> distTime(1.0f, 3.0f);
-		particles[index].lifeTime = distTime(randomEngine);
-		particles[index].currentTime = 0;
-	}
-
-	std::uniform_real_distribution<float> distribution(-1.0f, 1.0f);
-	for (uint32_t index = 0; index < kNumInstanceMax; ++index) {
-		particles[index].transform.translate = { distribution(randomEngine), distribution(randomEngine), distribution(randomEngine) };
-		particles[index].velocity = { distribution(randomEngine), distribution(randomEngine), distribution(randomEngine) };
-	}
 
 	Microsoft::WRL::ComPtr<ID3D12Resource> instanceWVPResource =
 		dxCommon->CreateBufferResource(sizeof(ParticleForGPU) * kNumInstanceMax);
@@ -1650,7 +1810,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 	dxCommon->GetDevice()->CreateShaderResourceView(instanceWVPResource.Get(), &instancingSrvDesc, instancingSrvHandleCPU);
 	//
 	int currentBlendMode = kBlendModeNormal;
-	float clearColor[] = { 0.1f, 0.25f, 0.5f, 1.0f };
+	//float clearColor[] = { 0.1f, 0.25f, 0.5f, 1.0f };
 
 	bool isLight = false;
 
@@ -1744,6 +1904,9 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		}
 		else {
 
+	//while (true){
+	//	if (winApp->ProcessMessage()) { break; }
+	//
 		input->Update();
 		if (input->TriggerKey(DIK_0)) {
 			OutputDebugStringA("Hit 0\n");
@@ -1768,18 +1931,25 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		Matrix4x4 projectionMatrix = MakePerspectiveFovMatrix(0.45f,
 			float(kClientWidth) / float(kClientHeight), 0.1f, 100.0f);
 
-		Matrix4x4 backToFrontMatrix = MakeRotatedXYZMatrix(
-				MakeRotateXMatrix(cameraTransform.rotate.x), 
-				MakeRotateYMatrix(cameraTransform.rotate.y), 
-				MakeRotateZMatrix(cameraTransform.rotate.z));
 
-		//Matrix4x4 billboardMatrix = Multiply(backToFrontMatrix, cameraMatrix);
-		//billboardMatrix.m[3][0] = 0.0f;
-		//billboardMatrix.m[3][1] = 0.0f;
-		//billboardMatrix.m[3][2] = 0.0f; 
+		Matrix4x4 backToFrontMatrix = MakeIdentity4x4(backToFrontMatrix);
+
+		backToFrontMatrix.m[0][0] = viewMatrix.m[0][0];
+		backToFrontMatrix.m[0][1] = viewMatrix.m[1][0];
+		backToFrontMatrix.m[0][2] = viewMatrix.m[2][0];
+
+		backToFrontMatrix.m[1][0] = viewMatrix.m[0][1];
+		backToFrontMatrix.m[1][1] = viewMatrix.m[1][1];
+		backToFrontMatrix.m[1][2] = viewMatrix.m[2][1];
+
+		backToFrontMatrix.m[2][0] = viewMatrix.m[0][2];
+		backToFrontMatrix.m[2][1] = viewMatrix.m[1][2];
+		backToFrontMatrix.m[2][2] = viewMatrix.m[2][2];
 
 		// === Update ===
 		//transform.rotate.y += 0.03f;  
+
+
 
 		Matrix4x4 viewMatrixSprite;
 		MakeIdentity4x4(viewMatrixSprite);
@@ -1807,59 +1977,66 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		
 		materialSpriteData->uvTransform = MakeUVTransformMatrix(uvTransformSprite);
 
-		///////
+
+
+		//////////////////////////////////////////////////////////////////////////////
+		//  Safety Clamp (to avoid crash)
+		//////////////////////////////////////////////////////////////////////////////
+		emitter.count = (std::max)(0u, (std::min)(emitter.count, kNumInstanceMax));
+		numInstance = (std::max)(0u, (std::min)(numInstance, kNumInstanceMax));
+
+		if (isUpdate && useEmitter) {
+			//////////////////////////////////////////////////////////////////
+			// 1. Update Particles
+			/////////////////////////////////////////////////////////////////
 		
+			for (auto it = particles.begin(); it != particles.end();){
+				Particle& p = *it;
 
-		//for (std::list<Particle>::iterator particleIterator = particles.begin();
-		//	particleIterator != particles.end(); ) {
-		//
-		//	if ((*particleIterator).lifeTime <= (*particleIterator).currentTime) {
-		//		continue;	//skip dead particle
-		//	}
-		//
-		//	///various processes go here
-		//
-		//
-		//	++particleIterator;
-		//}
+				p.transform.translate.x += p.velocity.x * kDeltaTime;
+				p.transform.translate.y += p.velocity.y * kDeltaTime;
+				p.transform.translate.z += p.velocity.z * kDeltaTime;
+				p.currentTime += kDeltaTime;
 
-		////////
-
-		// Instancing matrices for Model 2 (Particle) — perspective camera + Model 2 parent transform
-				if (numInstance < 1) numInstance = 1;
-				if (numInstance > kNumInstanceMax) numInstance = kNumInstanceMax;
-		
-			//for (uint32_t index = 0; index < numInstance; ++index) {
-			//	WorldTransform t = transforms[index];
-			//	t.translate.x += index * offset.x;
-			//	t.translate.y += index * offset.y;
-			//	t.translate.z += index * offset.z;
-
-			for (uint32_t index = 0; index < kNumInstanceMax; ++index) {
-
-				if (particles[index].lifeTime <= particles[index].currentTime) { continue; }
-				//particles[index].transform.translate.x += particles[index].velocity.x * kDeltaTime;
-				//particles[index].transform.translate.y += particles[index].velocity.y * kDeltaTime;
-				//particles[index].transform.translate.z += particles[index].velocity.z * kDeltaTime;
-
-				//particles[index].currentTime += kDeltaTime;
-
-				float alpha = 1.0f - (particles[index].currentTime / particles[index].lifeTime);
-				if (alpha < 0.0f) alpha = 0;
-
-				Matrix4x4 local;
-				if (useBillboard) {	///rotate to face camera (billboard)
-					local = Multiply(
-						Multiply(MakeScaleMatrix(particles[index].transform.scale),
-							backToFrontMatrix),
-						MakeTranslateMatrix(particles[index].transform.translate));
+				if (p.currentTime >= p.lifeTime) {
+					it = particles.erase(it);
 				}
-				else {				//// regular transform (no billboard)
-					local = MakeAffineMatrix(
-						particles[index].transform.scale,
-						particles[index].transform.rotate,
-						particles[index].transform.translate);
+				else {
+					++it;
 				}
+			}
+
+			/////////////////////////////////////////////////////////////////
+			//  2. Emit new particles
+			////////////////////////////////////////////////////////////////
+
+			emitter.frequencyTime += kDeltaTime;
+			if (emitter.frequency <= emitter.frequencyTime) {
+				particles.splice(particles.end(), Emit(emitter, randomEngine, materialSpriteData->color));
+				//emitter.frequencyTime -= emitter.frequency; /// either (interchangeable)
+				emitter.frequencyTime = 0.0f;				  /// or (interchangeable)
+			}
+			
+		}
+		/////////////////////////////////////////////////////////////////
+		//  3. Existing particles into instance buffer
+		/////////////////////////////////////////////////////////////////
+
+		uint32_t drawCount = 0;
+		if (useEmitter){
+			for (const Particle& p : particles){
+
+				if (drawCount >= kNumInstanceMax) break;
+				//if (numInstance < kNumInstanceMax) {
+
+				float alpha = 1.0f;
+				if (fadeOut) {
+					alpha = 1.0f - p.currentTime / p.lifeTime;
+					if (alpha < 0.0f) alpha = 0.0f;
+				}
+				
+
+				Matrix4x4 local = MakeBillboardWorld(p.transform.scale, p.transform.rotate, p.transform.translate, backToFrontMatrix, useBillboard);
 
 				Matrix4x4 parent = MakeAffineMatrix(
 					transformModel[1].scale,
@@ -1867,23 +2044,60 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 					transformModel[1].translate);
 
 				Matrix4x4 world = Multiply(local, parent);
-				instancingData[index].World = world;
-				instancingData[index].WVP = Multiply(world, Multiply(viewMatrix, projectionMatrix));
-				instancingData[index].color = {
-					particles[index].color.x,
-					particles[index].color.y,
-					particles[index].color.z,
-					alpha
-				};
-				++numInstance;
+
+				instancingData[drawCount].World = world;
+				instancingData[drawCount].WVP = Multiply(world, Multiply(viewMatrix, projectionMatrix));
+				if (randomColor) {
+					instancingData[drawCount].color = {
+						p.color.x,
+						p.color.y,
+						p.color.z,
+						alpha
+					};
+				}
+				else {
+					instancingData[drawCount].color = {
+						materialSpriteData->color.x,
+						materialSpriteData->color.y,
+						materialSpriteData->color.z,
+						alpha
+					};
+				}
+				
+				++drawCount;
 			}
-		//instancingData[numInstance].WVP = worldViewProjectionMatrix; 
-		//
-		//if (numInstance < kNumInstanceMax) {
-		//	instancingData[numInstance].WVP = worldViewProjectionMatrix;
-		//	++numInstance;
-		//}
-		//++particleIterator;
+				
+		}
+		else if (useInstancing){
+			for (uint32_t i = 0; i < numInstance && i < kNumInstanceMax; ++i) {
+				WorldTransform wt = transformModel[1];
+				wt.translate.x += i * offset.x;
+				wt.translate.y += i * offset.y;
+				wt.translate.z += i * offset.z;
+
+				Matrix4x4 world = MakeBillboardWorld(wt.scale, wt.rotate, wt.translate, backToFrontMatrix, useBillboard);
+				
+				instancingData[i].World = world;
+				instancingData[i].WVP = Multiply(world, Multiply(viewMatrix, projectionMatrix));
+				
+				if (randomColor) {
+					//std::uniform_real_distribution<float> colorDist(0.0f, 1.0f);
+					instancingData[i].color = {
+						instancingData[i].color.x,
+						instancingData[i].color.y,
+						instancingData[i].color.z,
+						1.0f
+					};
+				}
+				else {
+					instancingData[i].color = materialSpriteData->color;
+				}
+				++drawCount;
+			}
+		}
+		
+		////////
+
 #ifdef USE_IMGUI
 			ImGui_ImplDX12_NewFrame();
 			ImGui_ImplWin32_NewFrame();
@@ -1891,7 +2105,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 			//ImGui::ShowDemoWindow();
 
-			ImGui::Begin("UV Editor (Shared to Model and Sprite)");
+			ImGui::Begin("UV Editor (SHARED to Model and Sprite)");
 			// UV Transform
 			ImGui::DragFloat2("UVScale", &uvTransformSprite.scale.x, 0.01f, -10.0f, 10.0f);
 			ImGui::SliderAngle("UVRotate", &uvTransformSprite.rotate.z);
@@ -1916,7 +2130,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 			}
 			ImGui::Separator();
 			// ----- Model 1 (always visible) -----
-			ImGui::Checkbox("Enable Model 1", &showModel1);
+			ImGui::Checkbox("Enable Model 1 (Lighting)", &showModel1);
 
 			if (showModel1) {
 				ImGui::PushID(0);
@@ -1929,90 +2143,166 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 				if (ImGui::Button("Reset Transform")) {
 					transformModel[0] = { {1,1,1}, {0,0,0}, {2,0,5} };
 				}
+				ImGui::Checkbox("enableLighting", &isLight);
+				if (isLight) {
+					materialSpriteData->enableLighting = 1;
+
+					const char* lightingModes[] = { "Lambert", "Half-Lambert" };
+					ImGui::Combo("Lighting Mode", &materialSpriteData->lightingMode, lightingModes, IM_ARRAYSIZE(lightingModes));
+
+					//if (materialSpriteData->lightingMode == 1) {
+					//	ImGui::DragFloat("HalfLambert Power", &materialSpriteData->halfLambertPower, 0.05f, 0.5f, 8.0f);
+					//}
+					ImGui::ColorEdit4("Material Color", &materialSpriteData->color.x);
+
+					ImGui::ColorEdit4("LightColor", &directionalLightData->color.x);
+					ImGui::DragFloat3("LightDirection", &directionalLightData->direction.x, 0.01f, -10.0f, 10.0f);
+					ImGui::DragFloat("Intensity", &directionalLightData->intensity, 0.01f, 0.0f, 3.0f);
+					if (ImGui::Button("Reset Lighting")) {
+						materialSpriteData->color = { 1.0f, 1.0f, 1.0f, 1.0f };
+						directionalLightData->color = { 1.0f, 1.0f, 1.0f, 1.0f };
+						directionalLightData->direction = { 0.0f, -1.0f, 2.0f };
+						directionalLightData->intensity = 1.0f;
+						materialSpriteData->lightingMode = 1;
+						materialSpriteData->halfLambertPower = 2.0f;
+					}
+				}
+				else {
+					materialSpriteData->enableLighting = 0;
+				}
 				ImGui::PopID();
 			}
 			ImGui::Separator();
 			/////// ----- Model 2 (only when active) -----
-			ImGui::Checkbox("Enable Model 2", &showModel2);
+			ImGui::Checkbox("Enable Model 2 (Particle/Instancing)", &showModel2);
 			
 			if (showModel2) {
 				ImGui::PushID(1);
 				ImGui::Text("Model 2");
 				ImGui::Combo("Select Model", &selectModel[1], modelNames, IM_ARRAYSIZE(modelNames));
 				ImGui::Combo("Texture", &modelTexture[1][selectModel[1]], textureNames, IM_ARRAYSIZE(textureNames));
-				ImGui::Separator();
-				ImGui::Text("Number of Instances");
-				ImGui::InputInt("", reinterpret_cast<int*>(&numInstance), 1, (int)kNumInstanceMax);
-				ImGui::DragFloat3("offset", &offset.x, 0.01f, -5.0f, 5.0f);
-				if (ImGui::Button("Reset Instancing")) {
-					numInstance = 10;
-					offset = { 0.0f, 0.0f, 0.0f };
-
-				}
-				ImGui::Separator();
-				ImGui::Checkbox("Update", &isUpdate);
-				if (isUpdate) {
-					for (uint32_t index = 0; index < kNumInstanceMax; ++index) {
-						particles[index].transform.translate.x += particles[index].velocity.x * kDeltaTime;
-						particles[index].transform.translate.y += particles[index].velocity.y * kDeltaTime;
-						particles[index].transform.translate.z += particles[index].velocity.z * kDeltaTime;
-						particles[index].currentTime += kDeltaTime;
-					}
-
-				}
-				//if (ImGui::Button("Add Button")) {	///add particles and erase particles that have exceeded their lifespan
-				//	particles.push_back(MakeNewParticle(randomEngine));
-				//	particles.push_back(MakeNewParticle(randomEngine));
-				//}
-				ImGui::Separator();
+				ImGui::ColorEdit4("Material Color", &materialSpriteData->color.x);
+				
+				ImGui::Text("Model 2 Transform");
 				ImGui::DragFloat3("Scale", &transformModel[1].scale.x, 0.01f, 0.1f, 10.0f);
 				ImGui::DragFloat3("Rotation", &transformModel[1].rotate.x, 0.03f, -10.0f, 10.0f);
 				ImGui::DragFloat3("Position", &transformModel[1].translate.x, 0.01f, -10.0f, 10.0f);
-				if (ImGui::Button("Reset Transform")) {
+				if (ImGui::Button("Reset Transform and Color")) {
 					for (uint32_t index = 0; index < kNumInstanceMax; ++index) {
-						particles[index].transform.translate = { index * spacing, index * spacing, index * spacing };
-						particles[index].transform = { {1.0f,1.0f,1.0f}, {0.0f,0.0f,0.0f}, {-2.0f,0.0f,5.0f} };
-						particles[index].transform.translate = { distribution(randomEngine), distribution(randomEngine), distribution(randomEngine) };
-						particles[index].velocity = { distribution(randomEngine), distribution(randomEngine), distribution(randomEngine) };
-						//particles[index].color = { 1.0f, 1.0f, 1.0f, 1.0f };
-						//
-						//particles[index] = MakeNewParticle(randomEngine);
+						transformModel[1] = {
+							{1.0f, 1.0f, 1.0f},
+							{0.0f, 0.0f, 0.0f},
+							{-2.0f, 0.0f, 5.0f}
+						};
+
+						emitter.frequencyTime = 0.0f;
+						particles.splice(particles.end(), Emit(emitter, randomEngine, materialSpriteData->color));
+						materialSpriteData->color = { 1.0f, 1.0f, 1.0f, 1.0f };
+
 						numInstance = 1;
-						particles[index].currentTime = 0.0f; 
 					}
 				}
+				
+				if (useEmitter) {
+					ImGui::Text("Particle Creation Mode : Emitter");
+					if (ImGui::Checkbox("Use Instancing", &useInstancing)) {
+						useEmitter = false;
+					}
+					ImGui::Checkbox("Update", &isUpdate);
+					ImGui::Checkbox("Fade Out", &fadeOut);
+				}
+				if (useInstancing) {
+					ImGui::Text("Particle Creation Mode : Instancing");
+					if (ImGui::Checkbox("Use Emitter", &useEmitter)) {
+						useInstancing = false;
+					}
+				}
+				ImGui::Checkbox("Use Billboard", &useBillboard);
+				ImGui::Checkbox("Random Color", &randomColor);
+				
+				if (useInstancing && !useEmitter)
+				{
+					ImGui::InputInt("Instance Count", (int*)&numInstance, 1, 10);
+					if (numInstance < 0) numInstance = 0;
+					if (numInstance > (int)kNumInstanceMax) numInstance = kNumInstanceMax;
+					if (ImGui::Button("Reset Instancing")) {
+						numInstance = 10;
+						offset = { 0.2f, 0.3f, 0.0f };
+						
+						if (randomColor) {
+							std::uniform_real_distribution<float> colorDist(0.0f, 1.0f);
+							materialSpriteData->color = {
+								colorDist(randomEngine),
+								colorDist(randomEngine),
+								colorDist(randomEngine),
+								1.0f
+							};
+						}
+						else {
+							instancingData[numInstance].color = materialSpriteData->color;
+						}
+					}
+					ImGui::DragFloat3("Instance offset", &offset.x, 0.01f, -5.0f, 5.0f);
+				}
+				
+				if (useEmitter)
+				{
+					static int desiredCount = 10;
+					ImGui::InputInt("Particle Count", &desiredCount, 1, 10);
+					if (desiredCount < 0) desiredCount = 0;
+					if (desiredCount > (int)kNumInstanceMax) desiredCount = (int)kNumInstanceMax;
+
+					int current = (int)particles.size();
+
+					if (current < desiredCount) {
+						Emitter temp = emitter;
+						temp.count = desiredCount - current;
+						particles.splice(particles.end(), Emit(temp, randomEngine, materialSpriteData->color));
+					}
+					else if (current > desiredCount) {
+						int toRemove = current - desiredCount;
+						for (int i = 0; i < toRemove; ++i) {
+							if (!particles.empty()) {
+								particles.pop_front(); // or pop_back
+							}
+						}
+					}
+					ImGui::DragFloat("Particle LifeTIme", &particleLifeTime, 0.01f, 0.05f, 20.0f);
+
+					if (ImGui::Button("Reset Particles")) {	///add particles and erase particles that have exceeded their lifespan
+						desiredCount = 10;
+						drawCount = 0;
+						particles.clear();
+						particleLifeTime = 2.0f;
+						particles.splice(particles.end(), Emit(emitter, randomEngine, materialSpriteData->color));
+					}
+					if (ImGui::Button("Clear Particles")) {
+						particles.clear();
+						desiredCount = 0;
+					}
+					
+					ImGui::InputInt("Emit Count", (int*)&emitter.count);
+					if (emitter.count < 0) emitter.count = 0;
+					if (emitter.count > (int)kNumInstanceMax) emitter.count = kNumInstanceMax;
+					if (ImGui::Button("Emit Once (Current Emit Count)")) {
+						particles.splice(particles.end(), Emit(emitter, randomEngine, materialSpriteData->color));
+					}
+					if (ImGui::Button("Reset Emit Count")) {
+						emitter.count = 3;
+					}
+					if (ImGui::Button("Clear Emit")) {
+						emitter.count = 0;
+					}
+					ImGui::DragFloat("Frequency", &emitter.frequency, 0.01f, 0.05f, 5.0f);
+					ImGui::DragFloat3("Emitter Position", &emitter.transform.translate.x, 0.01f);
+					
+				}
+				
 				ImGui::PopID();
 			}
+			
 			ImGui::Separator();
-			ImGui::Checkbox("Use Billboard", &useBillboard);
-			ImGui::Separator();
-			ImGui::Checkbox("enableLighting", &isLight);
-			if (isLight) {
-				materialSpriteData->enableLighting = 1;
-
-				const char* lightingModes[] = { "Lambert", "Half-Lambert" };
-				ImGui::Combo("Lighting Mode", &materialSpriteData->lightingMode, lightingModes, IM_ARRAYSIZE(lightingModes));
-
-				//if (materialSpriteData->lightingMode == 1) {
-				//	ImGui::DragFloat("HalfLambert Power", &materialSpriteData->halfLambertPower, 0.05f, 0.5f, 8.0f);
-				//}
-				ImGui::ColorEdit4("Material Color", &materialSpriteData->color.x);
-
-				ImGui::ColorEdit4("LightColor", &directionalLightData->color.x);
-				ImGui::DragFloat3("LightDirection", &directionalLightData->direction.x, 0.01f, -10.0f, 10.0f);
-				ImGui::DragFloat("Intensity", &directionalLightData->intensity, 0.01f, 0.0f, 3.0f);
-				if (ImGui::Button("Reset Lighting")) {
-					materialSpriteData->color = { 1.0f, 1.0f, 1.0f, 1.0f };
-					directionalLightData->color = { 1.0f, 1.0f, 1.0f, 1.0f };
-					directionalLightData->direction = { 0.0f, -1.0f, 2.0f };
-					directionalLightData->intensity = 1.0f;
-					materialSpriteData->lightingMode = 1;
-					materialSpriteData->halfLambertPower = 2.0f;
-				}
-			}
-			else {
-				materialSpriteData->enableLighting = 0;
-			}
+			
 			
 			//ImGui::Separator();
 			//ImGui::Text("Debug Camera");
@@ -2030,21 +2320,26 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 			ImGui::Begin("Camera Settings");
 			ImGui::DragFloat3("Camera Rotate", &cameraTransform.rotate.x, 0.03f, -10.0f, 10.0f);
-			ImGui::DragFloat3("Camera Position", &cameraTransform.translate.x, 0.01f, -10.0f, 10.0f);
+			ImGui::DragFloat3("Camera Position", &cameraTransform.translate.x, 0.01f, -20.0f, 20.0f);
+			if (ImGui::Button("Reset Camera")) {
+				cameraTransform.rotate = {1.047f, 3.142f, 0.0f};
+				cameraTransform.translate = { 0.0f, 10.0f, 10.0f };
+			}
+
 
 			ImGui::End();
 
 			
 			ImGui::Begin("Blend Settings");
-			ImGui::ColorEdit4("Clear Color", clearColor);
+			ImGui::ColorEdit4("Background Color", dxCommon->clearColor);
 			const char* blendModeNames[] = { "None", "Normal", "Add", "Subtract", "Multiply", "Screen"};
 			ImGui::Combo("Blend Mode", &currentBlendMode , blendModeNames, IM_ARRAYSIZE(blendModeNames));
 			if (ImGui::Button("Reset Blend Mode")) {
-				currentBlendMode = kBlendModeNone;
-				clearColor[0] = 0.1f;
-				clearColor[1] = 0.25f;
-				clearColor[2] = 0.5f;
-				clearColor[3] = 1.0f;
+				currentBlendMode = kBlendModeNormal;
+				dxCommon->clearColor[0] = 0.1f;
+				dxCommon->clearColor[1] = 0.25f;
+				dxCommon->clearColor[2] = 0.5f;
+				dxCommon->clearColor[3] = 1.0f;
 			}
 
 			//satety clamp
@@ -2081,7 +2376,12 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 			//// 2. ModelData
 			if (showModel1) {
+				cmd->SetGraphicsRootSignature(dxCommon->rootSignature.Get());
+				cmd->SetPipelineState(dxCommon->graphicsPipelineStates[currentBlendMode].Get());
 
+				cmd->SetGraphicsRootConstantBufferView(1, materialResourceSprite->GetGPUVirtualAddress());
+				cmd->SetGraphicsRootConstantBufferView(3, materialResourceLight->GetGPUVirtualAddress());
+				
 				int idx = selectModel[0];
 				if (modelData[idx].vertices.size() > 0 && modelVertexResources[idx]) {
 					cmd->SetGraphicsRootConstantBufferView(0, modelWVPResource[0]->GetGPUVirtualAddress());
@@ -2097,7 +2397,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 				modelData[selectModel[1]].vertices.size(),
 				modelTexture[1][selectModel[1]]).c_str());
 
-			if (showModel2) {
+			if (showModel2 && drawCount > 0) {
 				// Particle root : [0] = VS structured buffer, [1] = PS material, [2] = PS texture
 				cmd->SetGraphicsRootSignature(dxCommon->particleRootSignature.Get());
 				cmd->SetPipelineState(dxCommon->particlePipelineStates[currentBlendMode].Get());
@@ -2110,7 +2410,7 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 					cmd->SetGraphicsRootDescriptorTable(2, textureHandles[modelTexture[1][idx]]);
 					cmd->IASetVertexBuffers(0, 1, &modelVertexBufferViews[idx]);
 					cmd->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-					cmd->DrawInstanced(UINT(modelData[idx].vertices.size()), numInstance, 0, 0); //change 1 to kNumInstance (Particle )
+					cmd->DrawInstanced(UINT(modelData[idx].vertices.size()), drawCount, 0, 0); //change 1 to kNumInstance (Particle )
 				}
 			}
 			// Switch back to Object3d for sprite
@@ -2129,9 +2429,19 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 				cmd->DrawInstanced(6, 1, 0, 0);
 			}
 
+			//////////////////////////cmd->SetGraphicsRootSignature(lineRootSignature.Get());
+			//////////////////////////cmd->SetPipelineState(linePipelineState.Get());
+			//////////////////////////
+			//////////////////////////// identity world → just view * projection
+			//////////////////////////Matrix4x4 wvp = Multiply(viewMatrix, projectionMatrix);
+			//////////////////////////// upload wvp to a small constant buffer and bind it to root parameter 0
+			//////////////////////////
+			//////////////////////////cmd->IASetVertexBuffers(0, 1, &lineVBV);
+			//////////////////////////cmd->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_LINELIST);
+			//////////////////////////cmd->DrawInstanced(lineVertexCount, 1, 0, 0);
 			
 		#ifdef USE_IMGUI
-			ImGui_ImplDX12_RenderDrawData(ImGui::GetDrawData(), cmd);
+			ImGui_ImplDX12_RenderDrawData(ImGui::GetDrawData(), dxCommon->GetCommandList());
 		#endif
 
 			dxCommon->PostDraw();

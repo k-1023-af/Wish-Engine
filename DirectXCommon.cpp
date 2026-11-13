@@ -106,9 +106,10 @@ void DirectXCommon::PostDraw() {
 
 	if (fence->GetCompletedValue() != fenceValue) {
 		HANDLE event = CreateEvent(nullptr, false, false, nullptr);
-		fence->SetEventOnCompletion(fenceValue, event);
+		hr = fence->SetEventOnCompletion(fenceValue, event);
+		assert(SUCCEEDED(hr));
 		WaitForSingleObject(event, INFINITE);
-		//CloseHandle(event);
+		CloseHandle(event);
 	}
 
 	UpdateFixFPS();
