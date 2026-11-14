@@ -1949,8 +1949,6 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		// === Update ===
 		//transform.rotate.y += 0.03f;  
 
-
-
 		Matrix4x4 viewMatrixSprite;
 		MakeIdentity4x4(viewMatrixSprite);
 
