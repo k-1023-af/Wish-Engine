@@ -5,8 +5,8 @@
 struct Material
 {
     float4 color;
-    int32_t enableLighting;
-    int32_t lightingMode;
+    int enableLighting;
+    int lightingMode;
     float halfLambertPower;
     float padding; // Padding to align the next member to a 16-byte boundary
     float4x4 uvTransform;
@@ -26,7 +26,7 @@ PixelShaderOutput main(VertexShaderOutput input)
     float4 transformedUV = mul(float4(input.texcoord, 0.0f, 1.0f), gMaterial.uvTransform);
     //float4 textureColor = gTexture.Sample(gSampler, input.texcoord);
     float4 textureColor = gTexture.Sample(gSampler, transformedUV.xy);
-    output.color = gMaterial.color * textureColor * input.color;
+    output.color = input.color * gMaterial.color * textureColor;
     
     if (output.color.a == 0.0f) {
         discard;
