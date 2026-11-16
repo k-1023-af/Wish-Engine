@@ -6,7 +6,7 @@ on:
 
 env:
   # path to solution file relative to root directory
-  SOLUTION_FILE_PATH: project/01_Project.sln
+  SOLUTION_FILE_PATH: project/01_Project.slnx
   # Visual Studio Configuration (Debug / Release)
   CONFIGURATION: Debug
 
