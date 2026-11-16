@@ -21,13 +21,13 @@
 
 //#define DIRECTINPUT_VERSION	0x800
 //#include <dinput.h>
-#include "DebugCamera.h"
+#include "ヘッダー ファイル/engine/DebugCamera.h"
 #include <wrl.h>
-#include "Input.h"
-#include "WinApp.h"
-#include "DirectXCommon.h"
-#include "Logger.h"
-#include "StringUtility.h"
+#include "ヘッダー ファイル/engine/base/Input.h"
+#include "ヘッダー ファイル/engine/base/WinApp.h"
+#include "ヘッダー ファイル/engine/base/DirectXCommon.h"
+#include "ヘッダー ファイル/engine/base/Logger.h"
+#include "ヘッダー ファイル/engine/base/StringUtility.h"
 
 #include "externals/DirectXTex/DirectXTex.h"
 #include "externals/DirectXTex/d3dx12.h"

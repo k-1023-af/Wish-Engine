@@ -1,4 +1,4 @@
-#include "DirectXCommon.h"
+#include "ヘッダー ファイル/engine/base/DirectXCommon.h"
 #include <cassert>
 #include <format>
 #include <thread>

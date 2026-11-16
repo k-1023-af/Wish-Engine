@@ -1,4 +1,4 @@
-#include "DebugCamera.h"
+#include "ヘッダー ファイル/engine/DebugCamera.h"
 
 void DebugCamera::Initialize()
 {
