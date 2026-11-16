@@ -2,7 +2,7 @@
 on:
   push:
     branches:
-      -master
+      - master
 
 env:
   # path to solution file relative to root directory
