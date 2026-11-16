@@ -30,17 +30,17 @@ jobs:
 
    - name: 不要なファイルとディレクトリを検索 (bash)
      run: |
-    # ディレクトリ条件を構築 (最初の不要な -o を後で削除)
-    DIR_CONDITIONS=()
+     # ディレクトリ条件を構築 (最初の不要な -o を後で削除)
+    DIR_CONDITIONS=() 
     for pattern in $UNWANTED_DIR_PATTERNS; do
-    DIR_CONDITIONS+=(-o -iname "$pattern")
+      DIR_CONDITIONS+=(-o -iname "$pattern")
     done
     unset DIR_CONDITIONS[0]
 
 	# ディレクトリ条件を構築 (最初の不要な -o を後で削除)
     NAME_CONDITIONS=()
 	for pattern in $UNWANTED_DIR_PATTERNS; do
-	 NAME_CONDITIONS+=(-o -iname "$pattern")
+	  NAME_CONDITIONS+=(-o -iname "$pattern")
 	done
 	unset NAME_CONDITIONS[0]
 
