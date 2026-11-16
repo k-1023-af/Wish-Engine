@@ -3,7 +3,7 @@ name: CheckUnwantedFiles
 
 on:
  # Make it possible to run it manually from GitHub Actions
- workflor_dispatch:
+ workflow_dispatch:
  # Also works when pushing to the master branch
  push:
   branches:
