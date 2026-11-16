@@ -1548,16 +1548,18 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 	//Shader and Compile
 	// Object3d (Model 1)
-	ComPtr<IDxcBlob> vertexShaderBlob = dxCommon->CompileShader(L"Object3d.VS.hlsl", L"vs_6_0");
-	ComPtr<IDxcBlob> pixelShaderBlob = dxCommon->CompileShader(L"Object3d.PS.hlsl", L"ps_6_0");
-	//assert(vertexShaderBlob != nullptr);
-	//assert(pixelShaderBlob != nullptr);
-	assert(vertexShaderBlob && pixelShaderBlob);
+	ComPtr<IDxcBlob> vertexShaderBlob = dxCommon->CompileShader(L"Resources/shaders/Object3d.VS.hlsl", L"vs_6_0");
+	ComPtr<IDxcBlob> pixelShaderBlob = dxCommon->CompileShader(L"Resources/shaders/Object3d.PS.hlsl", L"ps_6_0");
+	assert(vertexShaderBlob != nullptr);
+	assert(pixelShaderBlob != nullptr);
+	//assert(vertexShaderBlob && pixelShaderBlob);
 
 	// Particle (Model 2)
-	ComPtr<IDxcBlob> particleVSBlob = dxCommon->CompileShader(L"Particle.VS.hlsl", L"vs_6_0");
-	ComPtr<IDxcBlob> particlePSBlob = dxCommon->CompileShader(L"Particle.PS.hlsl", L"ps_6_0");
-	assert(particleVSBlob && particlePSBlob);
+	ComPtr<IDxcBlob> particleVSBlob = dxCommon->CompileShader(L"Resources/shaders/Particle.VS.hlsl", L"vs_6_0");
+	ComPtr<IDxcBlob> particlePSBlob = dxCommon->CompileShader(L"Resources/shaders/Particle.PS.hlsl", L"ps_6_0");
+	assert(particleVSBlob != nullptr);
+	assert(particlePSBlob != nullptr);
+	//assert(particleVSBlob && particlePSBlob);
 
 	//////////D3D12_DEPTH_STENCIL_VIEW_DESC dsvDesc{};
 	//////////dsvDesc.Format = DXGI_FORMAT_D24_UNORM_S8_UINT;

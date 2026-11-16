@@ -5,8 +5,8 @@
 struct Material
 {
     float4 color;
-    int32_t enableLighting;
-    int32_t lightingMode;
+    int enableLighting;
+    int lightingMode;
     float halfLambertPower;
     float padding; // Padding to align the next member to a 16-byte boundary
     float4x4 uvTransform;
