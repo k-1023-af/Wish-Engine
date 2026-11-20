@@ -173,6 +173,7 @@ copy "$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxil.dll" "$(TargetDir)dx
     <ClCompile Include="ソース ファイル\engine\base\WinApp.cpp" />
     <ClCompile Include="ソース ファイル\engine\DebugCamera.cpp" />
     <ClCompile Include="ソース ファイル\engine\main.cpp" />
+    <ClCompile Include="ソース ファイル\engine\math\Function.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="externals\imgui\imconfig.h" />
@@ -190,6 +191,7 @@ copy "$(WindowsSdkDir)bin\$(TargetPlatformVersion)\x64\dxil.dll" "$(TargetDir)dx
     <ClInclude Include="ヘッダー ファイル\engine\base\StringUtility.h" />
     <ClInclude Include="ヘッダー ファイル\engine\base\WinApp.h" />
     <ClInclude Include="ヘッダー ファイル\engine\DebugCamera.h" />
+    <ClInclude Include="ヘッダー ファイル\engine\math\Function.h" />
   </ItemGroup>
   <ItemGroup>
     <Text Include="externals\imgui\LICENSE.txt" />
