@@ -8,6 +8,15 @@
 
 #pragma comment(lib, "winmm.lib")
 
+#pragma region
+
+SpriteCommon* spriteCommon = nullptr;
+
+Sprite* sprite = new Sprite();
+
+#pragma endregion
+
+
 LRESULT CALLBACK WinApp::WindowProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 	if (ImGui_ImplWin32_WndProcHandler(hwnd, msg, wparam, lparam)) {
 		return true;
@@ -52,6 +61,12 @@ void WinApp::Initialize() {
 	ShowWindow(hwnd, SW_SHOW);
 
 	timeBeginPeriod(1);
+
+
+	spriteCommon = new SpriteCommon;
+	spriteCommon->Initialize();
+
+	sprite->Initialize();
 }
 
 void WinApp::Update() {
@@ -75,4 +90,15 @@ bool WinApp::ProcessMessage() {
 	}
 	
 	return false;
+}
+
+WinApp::WinApp() { }
+
+WinApp::~WinApp()
+{
+
+	delete sprite;
+	delete spriteCommon;
+	
+
 }

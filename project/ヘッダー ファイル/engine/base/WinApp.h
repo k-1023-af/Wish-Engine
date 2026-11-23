@@ -3,6 +3,8 @@
 #include <cstdint>
 #include <stdint.h>
 //#include <wrl.h>
+#include "ヘッダー ファイル/engine/2d/SpriteCommon.h"
+#include "ヘッダー ファイル/engine/2d/Sprite.h"
 #include "externals/imgui/imgui.h"
 
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
@@ -26,6 +28,9 @@ public:
 	HINSTANCE GetHInstance() const { return wc.hInstance; }
 
 	bool ProcessMessage();
+
+	WinApp();
+	~WinApp();
 
 private:
 	HWND hwnd = nullptr;

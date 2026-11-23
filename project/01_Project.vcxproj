@@ -168,6 +168,8 @@
     <ClCompile Include="externals\imgui\imgui_impl_win32.cpp" />
     <ClCompile Include="externals\imgui\imgui_tables.cpp" />
     <ClCompile Include="externals\imgui\imgui_widgets.cpp" />
+    <ClCompile Include="ソース ファイル\engine\2d\Sprite.cpp" />
+    <ClCompile Include="ソース ファイル\engine\2d\SpriteCommon.cpp" />
     <ClCompile Include="ソース ファイル\engine\base\D3DResourceLeakChecker.cpp" />
     <ClCompile Include="ソース ファイル\engine\base\DirectXCommon.cpp" />
     <ClCompile Include="ソース ファイル\engine\base\Input.cpp" />
@@ -187,6 +189,8 @@
     <ClInclude Include="externals\imgui\imstb_rectpack.h" />
     <ClInclude Include="externals\imgui\imstb_textedit.h" />
     <ClInclude Include="externals\imgui\imstb_truetype.h" />
+    <ClInclude Include="ヘッダー ファイル\engine\2d\Sprite.h" />
+    <ClInclude Include="ヘッダー ファイル\engine\2d\SpriteCommon.h" />
     <ClInclude Include="ヘッダー ファイル\engine\base\D3DResourceLeakChecker.h" />
     <ClInclude Include="ヘッダー ファイル\engine\base\DirectXCommon.h" />
     <ClInclude Include="ヘッダー ファイル\engine\base\Input.h" />
