@@ -15,7 +15,7 @@ on:
 
 env:
  # specific file names and extensions
- UNWANTED_NAME PATTERS: "*.pdb *.ilk *.user *.ncb *.suo *.log *.dmp *.zip imgui.ini desktop.ini dxcompiler.dll dxil.dll"
+ UNWANTED_NAME_PATTERNS: "*.pdb *.ilk *.user *.ncb *.suo *.log *.dmp *.zip imgui.ini desktop.ini dxcompiler.dll dxil.dll"
 
  # Directory name patters (Build output folder etc)
  UNWANTED_DIR_PATTERNS: "generated x64 win32 arm64 .vs bin ipch logs Dump"
